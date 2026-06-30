@@ -16,13 +16,15 @@ def render_backend_status() -> dict:
     data = status.get("data") or {}
 
     with st.sidebar:
-        st.subheader("System Status")
+        st.markdown("### System Status")
         if status.get("ok"):
-            st.success("Backend connected")
-            st.write(f"Model loaded: `{data.get('model_loaded')}`")
-            st.write(f"Database: `{data.get('database')}`")
+            st.success("Backend connected", icon="✅")
+            st.caption(
+                f"Model loaded: `{data.get('model_loaded')}`  \n"
+                f"Database: `{data.get('database')}`"
+            )
             if data.get("model_version"):
-                st.caption(f"Model: {data.get('model_version')}")
+                st.caption(f"Model version: `{data.get('model_version')}`")
             if data.get("model_error"):
                 st.warning(str(data.get("model_error")))
         else:

@@ -1,18 +1,86 @@
-"""ESI result display helpers."""
+"""ESI result hero display helpers."""
 
 from __future__ import annotations
+
+from html import escape
 
 import streamlit as st
 
 
-def render_main_result_card(result: dict) -> None:
-    confidence = result.get("confidence_score")
-    confidence_text = f"{float(confidence):.1%}" if confidence is not None else "Unavailable"
+ESI_INTERPRETATION = {
+    2: "Safety-rule escalation: high-priority clinician review recommended.",
+    3: "Urgent evaluation; patient may require multiple resources.",
+    4: "Lower-acuity evaluation pathway; likely one resource after review.",
+    5: "Non-urgent care pathway; minimal resources may be appropriate after review.",
+}
 
-    st.markdown('<div class="result-band">', unsafe_allow_html=True)
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Final ESI", result.get("final_esi") or "Pending")
-    col2.metric("Predicted ESI", result.get("predicted_esi") or "Pending")
-    col3.metric("Confidence", confidence_text)
-    col4.metric("Final Source", result.get("final_source") or "fallback")
-    st.markdown("</div>", unsafe_allow_html=True)
+
+def _confidence_text(value: object) -> str:
+    if value is None:
+        return "Unavailable"
+    try:
+        return f"{float(value):.1%}"
+    except (TypeError, ValueError):
+        return "Unavailable"
+
+
+def render_main_result_card(result: dict) -> None:
+    final_esi = result.get("final_esi") or "Pending"
+    predicted_esi = result.get("predicted_esi") or "Pending"
+    confidence = _confidence_text(result.get("confidence_score"))
+    final_source = result.get("final_source") or "fallback"
+    model_loaded = bool(result.get("model_loaded"))
+    is_placeholder = bool(result.get("is_placeholder"))
+    source_label = str(final_source).replace("_", " ").title()
+
+    interpretation = ESI_INTERPRETATION.get(
+        result.get("final_esi"),
+        "Model estimates ESI 3/4/5; safety rules may escalate final ESI to 2.",
+    )
+    model_badge_class = "badge-ok" if model_loaded else "badge-warn"
+    placeholder_badge_class = "badge-warn" if is_placeholder else "badge-ok"
+    placeholder_text = "Fallback response" if is_placeholder else "Real model output"
+
+    st.markdown(
+        f"""
+        <div class="hero-card">
+          <div class="hero-grid">
+            <div>
+              <div class="eyebrow">Final ESI</div>
+              <div class="final-esi">{escape(str(final_esi))}</div>
+              <div style="color:#31566f;font-weight:700;margin-top:.35rem;">
+                {escape(interpretation)}
+              </div>
+              <div style="margin-top:.8rem;">
+                <span class="badge {model_badge_class}">Model loaded: {str(model_loaded)}</span>
+                <span class="badge {placeholder_badge_class}">{escape(placeholder_text)}</span>
+              </div>
+            </div>
+            <div>
+              <div class="metric-row">
+                <div class="mini-metric">
+                  <div class="metric-label">Predicted ESI</div>
+                  <div class="metric-value">{escape(str(predicted_esi))}</div>
+                </div>
+                <div class="mini-metric">
+                  <div class="metric-label">Confidence</div>
+                  <div class="metric-value">{escape(confidence)}</div>
+                </div>
+                <div class="mini-metric">
+                  <div class="metric-label">Final Source</div>
+                  <div class="metric-value">{escape(source_label)}</div>
+                </div>
+              </div>
+              <div style="margin-top:.85rem;color:#526070;font-size:.9rem;line-height:1.55;">
+                ESI 3 indicates urgent evaluation and likely multiple resources.
+                ESI 4 suggests lower-acuity evaluation with likely one resource.
+                ESI 5 suggests non-urgent/minimal-resource care after clinician review.
+                Safety rules may escalate the final recommendation to ESI 2 when
+                high-risk criteria are triggered.
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
