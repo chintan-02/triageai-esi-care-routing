@@ -1,1 +1,21 @@
-"""Structured patient intake schema placeholders."""
+"""Structured patient intake request schemas."""
+
+from pydantic import BaseModel, Field
+
+
+class PatientIntakeRequest(BaseModel):
+    patient_age: int = Field(..., ge=0, le=120)
+    sex: str | None = None
+    chief_complaint: str = Field(..., min_length=3)
+    symptom_duration: str | None = None
+    pain_score: int | None = Field(default=None, ge=0, le=10)
+    temperature_c: float | None = None
+    heart_rate: int | None = None
+    respiratory_rate: int | None = None
+    systolic_bp: int | None = None
+    diastolic_bp: int | None = None
+    oxygen_saturation: float | None = Field(default=None, ge=0, le=100)
+    consciousness_level: str | None = None
+    pregnancy: bool | None = None
+    arrival_mode: str | None = None
+    additional_context: str | None = None

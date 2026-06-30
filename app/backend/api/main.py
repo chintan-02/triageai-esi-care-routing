@@ -1,6 +1,12 @@
 from fastapi import FastAPI
 
+from app.backend.api.routes.assessments import router as assessments_router
+from app.backend.api.routes.clinician_review import router as clinician_review_router
+from app.backend.api.routes.dashboard import router as dashboard_router
 from app.backend.api.routes.health import router as health_router
+from app.backend.api.routes.predict import router as predict_router
+from app.backend.api.routes.reports import router as reports_router
+from app.backend.api.routes.speech import router as speech_router
 from app.backend.core.config import settings
 
 
@@ -11,3 +17,9 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(speech_router)
+app.include_router(predict_router)
+app.include_router(assessments_router)
+app.include_router(clinician_review_router)
+app.include_router(dashboard_router)
+app.include_router(reports_router)
