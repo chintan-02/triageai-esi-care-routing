@@ -86,6 +86,10 @@ future phase:
 
 Accepts `PatientIntakeRequest`.
 
+The Streamlit frontend submits intake to this endpoint and renders the returned
+`assessment_id`, `request_id`, ESI prediction fields, probabilities, safety
+rules, recommendation, explanation, clinician summary, and model metadata.
+
 Phase 4 stores the intake as a database-backed assessment, attempts to load the
 approved ESI 3/4/5 artifacts, and stores prediction metadata against that
 assessment.
