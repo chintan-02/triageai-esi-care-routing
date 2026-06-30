@@ -23,24 +23,31 @@ def test_patient_intake_schema_validates_bounds() -> None:
     assert intake.chief_complaint == "Chest discomfort"
 
 
-def test_predict_returns_contract_only_placeholder() -> None:
+def test_predict_returns_model_aware_response() -> None:
     response = client.post("/predict", json=valid_intake_payload())
 
     assert response.status_code == 200
     body = response.json()
     assert body["assessment_id"]
     assert body["acuity_scale"] == "ESI"
-    assert body["model_loaded"] is False
-    assert body["predicted_esi"] is None
-    assert body["final_esi"] is None
-    assert body["confidence_score"] is None
-    assert body["probabilities"] == {}
-    assert body["safety_rules_triggered"] == []
-    assert body["is_placeholder"] is True
-    assert body["recommendation"] == (
-        "Model inference is not connected yet. This endpoint validates the "
-        "request contract only."
-    )
+    assert "model_loaded" in body
+    assert isinstance(body["model_loaded"], bool)
+
+    if body["model_loaded"]:
+        assert body["is_placeholder"] is False
+        assert body["model_version"] == "esi_345_lightgbm_v2_threshold"
+        assert body["predicted_esi"] in [3, 4, 5]
+        assert body["final_esi"] in [2, 3, 4, 5]
+        assert body["confidence_score"] is not None
+        assert set(body["probabilities"]) == {"ESI_3", "ESI_4", "ESI_5"}
+        assert body["final_source"] in ["model", "safety_rule_override"]
+        assert "Model inference is not connected yet" not in body["recommendation"]
+    else:
+        assert body["is_placeholder"] is True
+        assert body["predicted_esi"] is None
+        assert body["final_esi"] is None
+        assert body["confidence_score"] is None
+        assert body["probabilities"] == {}
     assert "not a diagnosis" in body["disclaimer"]
 
 

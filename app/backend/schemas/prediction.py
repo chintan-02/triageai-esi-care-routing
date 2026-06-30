@@ -21,6 +21,7 @@ class ESIPredictionResponse(BaseModel):
     request_id: str
     assessment_id: str | None = None
     acuity_scale: Literal["ESI"] = "ESI"
+    model_version: str | None = None
     model_loaded: bool
     predicted_esi: int | None = Field(default=None, ge=1, le=5)
     final_esi: int | None = Field(default=None, ge=1, le=5)

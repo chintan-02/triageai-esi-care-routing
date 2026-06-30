@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    MODEL_PATH: str = "model_artifacts/model.joblib"
-    PREPROCESSOR_PATH: str = "model_artifacts/preprocessor.joblib"
+    MODEL_PATH: str = "model_artifacts/esi_345_lightgbm_v2_threshold.txt"
+    PREPROCESSOR_PATH: str = ""
     THRESHOLDS_PATH: str = "model_artifacts/thresholds.json"
     FEATURE_SCHEMA_PATH: str = "model_artifacts/feature_schema.json"
     MODEL_METADATA_PATH: str = "model_artifacts/model_metadata.json"

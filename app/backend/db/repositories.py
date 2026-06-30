@@ -72,7 +72,7 @@ def create_prediction(
     prediction = Prediction(
         assessment_id=assessment_id,
         acuity_scale=prediction_response.acuity_scale,
-        model_version=None,
+        model_version=prediction_response.model_version,
         model_loaded=prediction_response.model_loaded,
         predicted_esi=prediction_response.predicted_esi,
         final_esi=prediction_response.final_esi,

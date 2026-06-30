@@ -46,9 +46,15 @@ workflow. It does not store unnecessary identifying information.
 `POST /assessments` creates a patient and assessment with status
 `pending_review`.
 
-`POST /predict` creates a patient and assessment, returns the existing
-contract-only ESI prediction response, and stores prediction metadata linked to
-the assessment. The model remains unloaded and `is_placeholder` remains `true`.
+`POST /predict` creates a patient and assessment, then runs the model-aware
+prediction flow:
+
+`PatientIntakeRequest -> feature_builder -> LightGBM V2 booster text model -> thresholds -> safety_rules -> explanation -> DB prediction record`
+
+If required artifacts are missing or invalid, the prediction service returns the
+safe placeholder response and stores placeholder prediction metadata. If
+artifacts are available, it stores real ESI 3/4/5 probabilities and the final ESI
+after transparent safety-rule handling.
 
 `POST /clinician-review` verifies the assessment exists, saves the clinician
 review, writes an audit log, and updates the assessment status to
@@ -66,9 +72,18 @@ No frontend UI is implemented in Phase 3.
 
 ## ML Pipeline
 
-The ML pipeline and model artifacts remain disconnected from the API in Phase 3.
-Prediction responses are contract-only, include `model_loaded: false`, and do
-not provide fake ESI inference.
+Training stays outside FastAPI in `ml/training` and notebooks. The backend only
+loads saved artifacts from `model_artifacts/`:
+
+- `esi_345_lightgbm_v2_threshold.txt`
+- `thresholds.json`
+- `feature_schema.json`
+- `model_metadata.json`
+
+The selected staging model is LightGBM V2 Weight + Threshold. V3 files are kept
+as comparison/reference artifacts only. Missing runtime support never crashes
+startup or `/predict`; it produces a clear placeholder response with
+`model_loaded: false`.
 
 ## Deployment
 

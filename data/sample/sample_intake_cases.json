@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "patient_age": 45,
+    "sex": "female",
+    "chief_complaint": "Chest discomfort",
+    "symptom_duration": "2 hours",
+    "pain_score": 6,
+    "heart_rate": 92,
+    "respiratory_rate": 18,
+    "systolic_bp": 132,
+    "diastolic_bp": 84,
+    "oxygen_saturation": 98.0,
+    "arrival_mode": "walk-in",
+    "additional_context": "No model inference should run unless artifacts are present."
+  }
+]

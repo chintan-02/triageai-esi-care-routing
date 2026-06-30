@@ -6,7 +6,7 @@ from app.backend.db import repositories
 from app.backend.db.session import get_db
 from app.backend.schemas.intake import PatientIntakeRequest
 from app.backend.schemas.prediction import ESIPredictionResponse
-from app.backend.services.prediction_service import validate_prediction_contract
+from app.backend.services.prediction_service import predict_esi_for_intake
 
 router = APIRouter(prefix="/predict", tags=["prediction"])
 
@@ -17,7 +17,7 @@ def predict_esi(
     db: Session = Depends(get_db),
 ) -> ESIPredictionResponse:
     assessment = repositories.create_assessment(db, intake)
-    response = validate_prediction_contract(intake)
+    response = predict_esi_for_intake(intake)
     response.assessment_id = assessment.id
     repositories.create_prediction(db, assessment.id, response)
     return response

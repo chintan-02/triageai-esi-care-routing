@@ -86,22 +86,29 @@ future phase:
 
 Accepts `PatientIntakeRequest`.
 
-Phase 3 stores the intake as a database-backed assessment, builds the
-contract-only ESI response, and stores the prediction metadata against that
-assessment. It does not load a model, infer an ESI level, or apply real clinical
-routing.
+Phase 4 stores the intake as a database-backed assessment, attempts to load the
+approved ESI 3/4/5 artifacts, and stores prediction metadata against that
+assessment.
+
+If required artifacts are missing or invalid, the endpoint returns the safe
+placeholder shape with `model_loaded: false` and `is_placeholder: true`.
+
+If artifacts are present and valid, the endpoint returns model probabilities,
+`model_loaded: true`, a predicted ESI, safety-rule-adjusted final ESI, and
+`is_placeholder: false`.
 
 Required placeholder response behavior:
 
 - `assessment_id`: ID of the persisted assessment
 - `acuity_scale`: `ESI`
-- `model_loaded`: `false`
-- `predicted_esi`: `null`
-- `final_esi`: `null`
-- `confidence_score`: `null`
-- `probabilities`: `{}`
-- `is_placeholder`: `true`
-- `recommendation`: `Model inference is not connected yet. This endpoint validates the request contract only.`
+- `model_loaded`: `false` when artifacts are unavailable, otherwise `true`
+- `model_version`: artifact metadata version when available
+- `predicted_esi`: `null` without artifacts, otherwise ESI 3/4/5
+- `final_esi`: `null` without artifacts, otherwise model output or safety-rule escalation
+- `confidence_score`: `null` without artifacts, otherwise selected class probability
+- `probabilities`: `{}` without artifacts, otherwise class probabilities
+- `is_placeholder`: `true` without artifacts, otherwise `false`
+- `recommendation`: placeholder text without artifacts, otherwise an ESI review pathway recommendation
 - `disclaimer`: decision-support only, not diagnosis
 
 ## Assessments
