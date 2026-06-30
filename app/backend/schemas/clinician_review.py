@@ -15,7 +15,7 @@ class ClinicianReviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_override_reason_for_override(self) -> "ClinicianReviewRequest":
-        if self.action == "override" and self.final_esi is not None and not self.override_reason:
+        if self.action == "override" and not self.override_reason:
             raise ValueError("override_reason is required when overriding final_esi")
         return self
 

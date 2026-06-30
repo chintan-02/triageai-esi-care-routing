@@ -1,11 +1,11 @@
 # API Contract
 
-TriageAI Phase 2 exposes ESI-only backend contracts. Prediction, speech,
-persistence, review, dashboard, and report endpoints are placeholders until
-their production integrations are implemented.
+TriageAI Phase 3 exposes ESI-only backend contracts with local database
+persistence for assessments, prediction records, clinician reviews, audit logs,
+report metadata, and dashboard summaries.
 
-Placeholder responses include `is_placeholder: true` and must not be treated as
-clinical output.
+Responses with `is_placeholder: true` are workflow scaffolding only and must not
+be treated as clinical output.
 
 ## Health
 
@@ -24,8 +24,8 @@ Returns service health.
 
 `GET /ready`
 
-Returns current backend readiness. Phase 2 does not connect the model or
-database.
+Returns current backend readiness. The ML model is still intentionally not
+loaded in Phase 3.
 
 ```json
 {
@@ -67,7 +67,8 @@ Optional fields:
 
 Accepts multipart form-data with `audio_file`.
 
-Returns a placeholder speech-to-text contract response:
+Returns a contract-only speech-to-text response. Azure Speech integration is a
+future phase:
 
 ```json
 {
@@ -85,11 +86,14 @@ Returns a placeholder speech-to-text contract response:
 
 Accepts `PatientIntakeRequest`.
 
-Phase 2 validates the request contract only. It does not load a model, infer an
-ESI level, or apply clinical routing.
+Phase 3 stores the intake as a database-backed assessment, builds the
+contract-only ESI response, and stores the prediction metadata against that
+assessment. It does not load a model, infer an ESI level, or apply real clinical
+routing.
 
 Required placeholder response behavior:
 
+- `assessment_id`: ID of the persisted assessment
 - `acuity_scale`: `ESI`
 - `model_loaded`: `false`
 - `predicted_esi`: `null`
@@ -104,13 +108,19 @@ Required placeholder response behavior:
 
 `POST /assessments`
 
-Accepts `PatientIntakeRequest` and returns a generated `assessment_id`. No
-database record is created in Phase 2.
+Accepts `PatientIntakeRequest`, creates a minimal patient record and assessment
+record, and returns:
+
+- `assessment_id`
+- `patient_id`
+- `status`: `pending_review`
+- `created_at`
+- `is_placeholder`: `false`
 
 `GET /assessments/{assessment_id}`
 
-Returns placeholder assessment detail for the requested ID. No persisted
-assessment is loaded in Phase 2.
+Loads the persisted assessment detail and returns `404` when the assessment does
+not exist.
 
 ## Clinician Review
 
@@ -122,17 +132,23 @@ Accepts:
 - `clinician_id`
 - `action`: `accept`, `override`, or `needs_review`
 - `final_esi`: optional integer from 1 to 5
-- `override_reason`: required when `action` is `override` and `final_esi` is provided
+- `override_reason`: required when `action` is `override`
 - `notes`
 
-Returns a generated `review_id` with `is_placeholder: true`. No review is
-persisted in Phase 2.
+Verifies the assessment exists, persists the review, writes an audit log, and
+updates assessment status:
+
+- `review_completed` for `accept` or `override`
+- `needs_review` for `needs_review`
+
+Returns `404` when the assessment does not exist. Successful responses include
+`is_placeholder: false`.
 
 ## Dashboard
 
 `GET /dashboard/summary`
 
-Returns zeroed placeholder dashboard counts:
+Returns database-backed dashboard counts:
 
 ```json
 {
@@ -142,9 +158,12 @@ Returns zeroed placeholder dashboard counts:
   "high_risk_flags": 0,
   "esi_distribution": {},
   "recent_assessments": [],
-  "is_placeholder": true
+  "is_placeholder": false
 }
 ```
+
+`high_risk_flags` and `esi_distribution` are based on the latest stored
+prediction `final_esi` when available.
 
 ## Reports
 
@@ -155,5 +174,6 @@ Accepts:
 - `assessment_id`
 - `include_audit`: boolean, default `true`
 
-Returns a placeholder report status with no `download_url`. No report file is
-generated in Phase 2.
+Verifies the assessment exists and stores report metadata with status `queued`.
+No PDF is generated yet, so the response keeps `is_placeholder: true` and
+`download_url: null`. Returns `404` when the assessment does not exist.

@@ -28,6 +28,7 @@ def test_predict_returns_contract_only_placeholder() -> None:
 
     assert response.status_code == 200
     body = response.json()
+    assert body["assessment_id"]
     assert body["acuity_scale"] == "ESI"
     assert body["model_loaded"] is False
     assert body["predicted_esi"] is None

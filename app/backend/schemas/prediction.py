@@ -19,6 +19,7 @@ class SafetyRuleResult(BaseModel):
 
 class ESIPredictionResponse(BaseModel):
     request_id: str
+    assessment_id: str | None = None
     acuity_scale: Literal["ESI"] = "ESI"
     model_loaded: bool
     predicted_esi: int | None = Field(default=None, ge=1, le=5)
