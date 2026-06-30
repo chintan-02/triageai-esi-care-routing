@@ -5,6 +5,7 @@ from app.backend.services.feature_builder import (
     build_raw_features_from_intake,
 )
 import json
+import pandas as pd
 from pathlib import Path
 
 
@@ -61,7 +62,7 @@ def test_feature_alignment_fills_missing_schema_columns() -> None:
 
     assert list(frame.columns) == ["patient_age", "has_fever", "unknown_text"]
     assert frame.iloc[0]["has_fever"] == 0
-    assert frame.iloc[0]["unknown_text"] is None
+    assert pd.isna(frame.iloc[0]["unknown_text"])
 
 
 def test_generated_feature_schema_contains_expected_v2_features() -> None:
