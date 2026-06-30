@@ -1,0 +1,1 @@
+"""Clinician summary card placeholder."""

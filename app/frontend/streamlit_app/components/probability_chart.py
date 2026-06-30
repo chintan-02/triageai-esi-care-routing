@@ -1,0 +1,1 @@
+"""Probability chart placeholder."""

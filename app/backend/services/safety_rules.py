@@ -1,0 +1,1 @@
+"""Safety rule service placeholder."""

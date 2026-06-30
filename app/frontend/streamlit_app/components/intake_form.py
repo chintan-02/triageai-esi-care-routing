@@ -1,0 +1,1 @@
+"""Structured intake form placeholder."""

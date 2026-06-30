@@ -1,0 +1,1 @@
+"""ESI result card placeholder."""

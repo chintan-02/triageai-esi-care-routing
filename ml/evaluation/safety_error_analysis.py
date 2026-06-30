@@ -1,0 +1,1 @@
+"""Safety error analysis placeholder."""

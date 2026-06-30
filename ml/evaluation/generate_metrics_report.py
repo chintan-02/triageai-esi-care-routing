@@ -1,0 +1,1 @@
+"""Metrics report generation placeholder."""
