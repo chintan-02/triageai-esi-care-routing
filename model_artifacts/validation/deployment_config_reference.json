@@ -1,0 +1,30 @@
+{
+  "task": "client_focused_esi_3_4_5",
+  "target_source_column": "esi",
+  "derived_label_column": "esi_label",
+  "label_map": {
+    "3": 0,
+    "4": 1,
+    "5": 2
+  },
+  "reverse_label_map": {
+    "0": 3,
+    "1": 4,
+    "2": 5
+  },
+  "class_names": [
+    "ESI 3",
+    "ESI 4",
+    "ESI 5"
+  ],
+  "models_included": [
+    "LightGBM",
+    "Dense Neural Network",
+    "Simple RNN Hybrid",
+    "Fixed GRU Hybrid"
+  ],
+  "best_esi5_threshold": 0.65,
+  "confidence_threshold": 0.6,
+  "use_previousdispo": false,
+  "important_warning": "This model excludes ESI 1 and ESI 2. Use a safety gate/grouped model before this client model."
+}

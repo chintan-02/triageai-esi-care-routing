@@ -1,4 +1,10 @@
 {
-  "version": "0.1.0",
-  "thresholds": {}
+  "strategy": "esi5_threshold_then_argmax",
+  "class_order": ["ESI_3", "ESI_4", "ESI_5"],
+  "esi5_threshold": 0.60,
+  "confidence_threshold": 0.60,
+  "selected_model": "LightGBM V2 Weight + Threshold",
+  "selected_from": "lgb_v2_validation_summary.csv",
+  "esi5_weight_multiplier": 0.75,
+  "notes": "Selected for MVP staging because V3 comparison still identified LightGBM V2 Weight+Threshold as the final candidate. This model only predicts ESI 3/4/5 and requires safety rules for high-risk ESI 1/2 cases."
 }

@@ -1,0 +1,7 @@
+{
+  "project": "SympDirect / TriageAI Client ESI 3/4/5",
+  "final_candidate_model": "LightGBM V2 Weight+Threshold \u2014 Test",
+  "candidate_status": "staging_candidate_not_clinical_production",
+  "selection_rule": "Rank by Macro F1, then ESI 5 F1, then lower ESI 3\u2192ESI 5 rate, using leakage-safe validation/test pipeline.",
+  "safety_note": "This model excludes ESI 1/2 by client requirement and should not be used as a full emergency triage model without safety rules and clinician review."
+}

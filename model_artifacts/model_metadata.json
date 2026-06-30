@@ -1,5 +1,20 @@
 {
-  "version": "0.1.0",
-  "model_loaded": false,
-  "description": "Placeholder metadata for the current ESI 3/4/5 training pipeline."
+  "model_name": "LightGBM V2 Weight + Threshold",
+  "model_version": "esi_345_lightgbm_v2_threshold",
+  "target": "ESI 3/4/5",
+  "classes": ["ESI_3", "ESI_4", "ESI_5"],
+  "model_file": "esi_345_lightgbm_v2_threshold.txt",
+  "artifact_type": "lightgbm_booster_text",
+  "candidate_status": "staging_candidate_not_clinical_production",
+  "metrics": {
+    "accuracy": 0.7835,
+    "macro_f1": 0.7042,
+    "weighted_f1": 0.7891,
+    "esi_5_f1": 0.5478,
+    "esi_3_to_esi_5_error": 0.00712
+  },
+  "decision_support_only": true,
+  "important_warning": "This model excludes ESI 1 and ESI 2. High-risk cases must be handled by safety rules or a separate safety gate before ESI 3/4/5 routing.",
+  "leakage_prevention": "No previousdispo, disposition, diagnosis, outcome, medication-after-visit, or post-triage fields should be used for client-facing inference.",
+  "selection_reason": "Selected over V3 for MVP because V3 comparison identified LightGBM V2 Weight+Threshold as the final candidate using Macro F1, ESI 5 F1, and ESI 3 to ESI 5 safety error ranking."
 }
