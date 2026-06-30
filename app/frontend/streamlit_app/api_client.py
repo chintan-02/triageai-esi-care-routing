@@ -4,5 +4,6 @@ from app.frontend.streamlit_app.services.api_client import (  # noqa: F401
     BACKEND_URL,
     START_BACKEND_COMMAND,
     get_ready_status,
+    submit_clinician_review,
     submit_prediction,
 )

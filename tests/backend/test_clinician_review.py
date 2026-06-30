@@ -34,6 +34,8 @@ def test_clinician_review_returns_db_backed_response() -> None:
     assert body["status"] == "review_completed"
     assert body["is_placeholder"] is False
     assert body["review_id"]
+    assert body["clinician_decision"] == "accept"
+    assert body["reviewed"] is True
 
 
 def test_clinician_review_override_requires_reason() -> None:
@@ -48,6 +50,33 @@ def test_clinician_review_override_requires_reason() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_clinician_review_override_saves_final_esi_and_note() -> None:
+    create_response = client.post("/assessments", json=valid_intake_payload())
+    assessment_id = create_response.json()["assessment_id"]
+
+    response = client.post(
+        "/clinician-review",
+        json={
+            "assessment_id": assessment_id,
+            "clinician_id": "clinician-456",
+            "action": "override",
+            "final_esi": 2,
+            "override_reason": "Vitals require higher-priority review.",
+            "notes": "Escalated after clinician review.",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["assessment_id"] == assessment_id
+    assert body["clinician_decision"] == "override"
+    assert body["clinician_final_esi"] == 2
+    assert body["review_note"] == "Vitals require higher-priority review."
+    assert body["status"] == "review_completed"
+    assert body["is_placeholder"] is False
+    assert body["timestamp"]
 
 
 def test_clinician_review_for_unknown_assessment_returns_404() -> None:

@@ -33,6 +33,8 @@ if submitted:
         if api_result.get("ok"):
             st.session_state["last_intake_payload"] = payload
             st.session_state["last_prediction_result"] = api_result["data"]
+            st.session_state["latest_intake_payload"] = payload
+            st.session_state["latest_prediction_response"] = api_result["data"]
             if api_result.get("message"):
                 st.warning(api_result["message"])
             st.success("Assessment complete.")

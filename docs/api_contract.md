@@ -140,11 +140,12 @@ not exist.
 Accepts:
 
 - `assessment_id`
-- `clinician_id`
-- `action`: `accept`, `override`, or `needs_review`
-- `final_esi`: optional integer from 1 to 5
+- `clinician_id` or `reviewer_name`; defaults to a workflow reviewer placeholder
+  when omitted
+- `action` or `clinician_decision`: `accept`, `override`, or `needs_review`
+- `final_esi` or `clinician_final_esi`: optional integer from 1 to 5
 - `override_reason`: required when `action` is `override`
-- `notes`
+- `notes` or `review_note`
 
 Verifies the assessment exists, persists the review, writes an audit log, and
 updates assessment status:
@@ -152,8 +153,27 @@ updates assessment status:
 - `review_completed` for `accept` or `override`
 - `needs_review` for `needs_review`
 
+When accepting and a stored model prediction exists, the accepted `final_esi`
+must match the model/safety final ESI. When overriding, `final_esi` and
+`override_reason` are required.
+
 Returns `404` when the assessment does not exist. Successful responses include
-`is_placeholder: false`.
+`is_placeholder: false`:
+
+```json
+{
+  "review_id": "review-id",
+  "assessment_id": "assessment-id",
+  "clinician_decision": "accept",
+  "clinician_final_esi": 3,
+  "review_note": "Reviewed with bedside context.",
+  "status": "review_completed",
+  "reviewed": true,
+  "message": "Clinician review saved and audit trail updated.",
+  "is_placeholder": false,
+  "timestamp": "2026-06-30T12:00:00Z"
+}
+```
 
 ## Dashboard
 

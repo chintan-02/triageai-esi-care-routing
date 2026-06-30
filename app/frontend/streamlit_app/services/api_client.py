@@ -141,3 +141,70 @@ def submit_prediction(
         "message": warning,
         "start_command": START_BACKEND_COMMAND,
     }
+
+
+def submit_clinician_review(
+    payload: dict[str, Any],
+    base_url: str = BACKEND_URL,
+) -> dict[str, Any]:
+    """Submit a clinician review decision to /clinician-review."""
+    try:
+        response = requests.post(
+            _backend_url(base_url, "/clinician-review"),
+            json=payload,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.Timeout:
+        return _request_error(
+            f"Clinician review request timed out after {REQUEST_TIMEOUT_SECONDS} seconds.",
+            "timeout",
+        )
+    except requests.RequestException:
+        return _request_error(
+            f"Backend is not running on {base_url}",
+            "connection",
+        )
+
+    body = _response_json(response)
+    if response.status_code == 422:
+        return {
+            "ok": False,
+            "backend_connected": True,
+            "status_code": response.status_code,
+            "data": body,
+            "error_type": "validation_error",
+            "message": "Please review the clinician decision fields and try again.",
+            "start_command": START_BACKEND_COMMAND,
+        }
+
+    if response.status_code == 404:
+        return {
+            "ok": False,
+            "backend_connected": True,
+            "status_code": response.status_code,
+            "data": body,
+            "error_type": "not_found",
+            "message": body.get("detail", "Assessment was not found."),
+            "start_command": START_BACKEND_COMMAND,
+        }
+
+    if response.status_code >= 400:
+        return {
+            "ok": False,
+            "backend_connected": True,
+            "status_code": response.status_code,
+            "data": body,
+            "error_type": "backend_error",
+            "message": body.get("detail", "Clinician review request failed."),
+            "start_command": START_BACKEND_COMMAND,
+        }
+
+    return {
+        "ok": True,
+        "backend_connected": True,
+        "status_code": response.status_code,
+        "data": body,
+        "error_type": None,
+        "message": None,
+        "start_command": START_BACKEND_COMMAND,
+    }

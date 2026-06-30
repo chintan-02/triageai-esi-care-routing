@@ -93,6 +93,19 @@ def create_prediction(
     return prediction
 
 
+def get_latest_prediction_for_assessment(
+    db: Session,
+    assessment_id: str,
+) -> Prediction | None:
+    statement = (
+        select(Prediction)
+        .where(Prediction.assessment_id == assessment_id)
+        .order_by(Prediction.created_at.desc())
+        .limit(1)
+    )
+    return db.scalars(statement).first()
+
+
 def create_clinician_review(
     db: Session,
     review_request: ClinicianReviewRequest,
