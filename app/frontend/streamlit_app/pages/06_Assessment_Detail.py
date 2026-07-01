@@ -73,6 +73,7 @@ def _candidate_assessment_id() -> str:
     )
     return (
         st.session_state.get("selected_assessment_id")
+        or st.session_state.get("assessment_detail_id")
         or latest_result.get("assessment_id")
         or ""
     )
@@ -375,6 +376,7 @@ if not api_result.get("ok"):
 
 detail = api_result["data"]
 st.session_state["selected_assessment_id"] = detail.get("assessment_id")
+st.session_state["assessment_detail_id"] = detail.get("assessment_id")
 
 _render_snapshot(detail)
 _render_prediction(detail)

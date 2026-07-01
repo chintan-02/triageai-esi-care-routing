@@ -76,6 +76,19 @@ hosted database.
 
 ## Creating Fresh Demo Data
 
+Scripted local reset/seed path:
+
+```bash
+python scripts/demo_reset_seed.py --backup
+python scripts/demo_reset_seed.py --backup --reset --seed --yes
+```
+
+The script prints the active `DATABASE_URL`, resolves the local SQLite path,
+refuses non-SQLite database URLs, requires `--yes` for destructive reset, backs
+up to `backups/demo_db/`, clears workflow tables, and seeds five demo cases
+through the real prediction service plus the normal clinician review repository
+flow. It does not hard-code model outputs.
+
 UI path:
 
 1. Start backend:

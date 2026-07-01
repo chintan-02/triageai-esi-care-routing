@@ -179,7 +179,7 @@ metric_cols[2].metric(
 metric_cols[3].metric("Pending review", summary.get("pending_reviews", 0))
 metric_cols[4].metric("Overrides", summary.get("override_count", 0))
 metric_cols[5].metric(
-    "Most common final ESI",
+    "Common final ESI",
     _display_value(summary.get("most_common_final_esi")),
 )
 
@@ -241,18 +241,21 @@ with right:
             "Assessment to open",
             list(assessment_options.keys()),
         )
+        selected_assessment_id = assessment_options[selected_label]
         action_cols = st.columns([1, 1], gap="medium")
         with action_cols[0]:
             if st.button("Load Assessment Detail", type="primary", width="stretch"):
-                st.session_state["selected_assessment_id"] = assessment_options[selected_label]
+                st.session_state["selected_assessment_id"] = selected_assessment_id
+                st.session_state["assessment_detail_id"] = selected_assessment_id
                 st.switch_page("pages/06_Assessment_Detail.py")
         with action_cols[1]:
             selected_row = next(
                 row
                 for row in filtered_rows
-                if row.get("assessment_id") == assessment_options[selected_label]
+                if row.get("assessment_id") == selected_assessment_id
             )
             if selected_row.get("status") != "review_completed":
                 if st.button("Open Detail for Review", width="stretch"):
-                    st.session_state["selected_assessment_id"] = assessment_options[selected_label]
+                    st.session_state["selected_assessment_id"] = selected_assessment_id
+                    st.session_state["assessment_detail_id"] = selected_assessment_id
                     st.switch_page("pages/06_Assessment_Detail.py")
