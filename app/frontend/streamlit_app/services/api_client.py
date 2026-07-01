@@ -13,6 +13,15 @@ REQUEST_TIMEOUT_SECONDS = 15
 START_BACKEND_COMMAND = (
     "python -m uvicorn app.backend.api.main:app --reload --port 8001"
 )
+__all__ = [
+    "BACKEND_URL",
+    "START_BACKEND_COMMAND",
+    "get_assessment_detail",
+    "get_dashboard_summary",
+    "get_ready_status",
+    "submit_clinician_review",
+    "submit_prediction",
+]
 
 
 def _backend_url(base_url: str, path: str) -> str:
@@ -74,6 +83,102 @@ def get_ready_status(base_url: str = BACKEND_URL) -> dict[str, Any]:
         "backend_connected": True,
         "status_code": response.status_code,
         "data": payload,
+        "error_type": None,
+        "message": None,
+        "start_command": START_BACKEND_COMMAND,
+    }
+
+
+def get_dashboard_summary(base_url: str = BACKEND_URL) -> dict[str, Any]:
+    """Load dashboard summary data from the backend."""
+    try:
+        response = requests.get(
+            _backend_url(base_url, "/dashboard/summary"),
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.Timeout:
+        return _request_error(
+            f"Dashboard request timed out after {REQUEST_TIMEOUT_SECONDS} seconds.",
+            "timeout",
+        )
+    except requests.RequestException:
+        return _request_error(
+            f"Backend is not running on {base_url}",
+            "connection",
+        )
+
+    body = _response_json(response)
+    if response.status_code >= 400:
+        return {
+            "ok": False,
+            "backend_connected": True,
+            "status_code": response.status_code,
+            "data": body,
+            "error_type": "backend_error",
+            "message": body.get("detail", "Dashboard request failed."),
+            "start_command": START_BACKEND_COMMAND,
+        }
+
+    return {
+        "ok": True,
+        "backend_connected": True,
+        "status_code": response.status_code,
+        "data": body,
+        "error_type": None,
+        "message": None,
+        "start_command": START_BACKEND_COMMAND,
+    }
+
+
+def get_assessment_detail(
+    assessment_id: str,
+    base_url: str = BACKEND_URL,
+) -> dict[str, Any]:
+    """Load a persisted assessment detail record from the backend."""
+    try:
+        response = requests.get(
+            _backend_url(base_url, f"/assessments/{assessment_id}"),
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.Timeout:
+        return _request_error(
+            f"Assessment detail request timed out after {REQUEST_TIMEOUT_SECONDS} seconds.",
+            "timeout",
+        )
+    except requests.RequestException:
+        return _request_error(
+            f"Backend is not running on {base_url}",
+            "connection",
+        )
+
+    body = _response_json(response)
+    if response.status_code == 404:
+        return {
+            "ok": False,
+            "backend_connected": True,
+            "status_code": response.status_code,
+            "data": body,
+            "error_type": "not_found",
+            "message": body.get("detail", "Assessment was not found."),
+            "start_command": START_BACKEND_COMMAND,
+        }
+
+    if response.status_code >= 400:
+        return {
+            "ok": False,
+            "backend_connected": True,
+            "status_code": response.status_code,
+            "data": body,
+            "error_type": "backend_error",
+            "message": body.get("detail", "Assessment detail request failed."),
+            "start_command": START_BACKEND_COMMAND,
+        }
+
+    return {
+        "ok": True,
+        "backend_connected": True,
+        "status_code": response.status_code,
+        "data": body,
         "error_type": None,
         "message": None,
         "start_command": START_BACKEND_COMMAND,

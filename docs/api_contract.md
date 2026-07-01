@@ -131,7 +131,17 @@ record, and returns:
 `GET /assessments/{assessment_id}`
 
 Loads the persisted assessment detail and returns `404` when the assessment does
-not exist.
+not exist. The response includes the persisted intake fields and, when
+available, read-only workflow detail:
+
+- `latest_prediction`: latest stored model prediction for the assessment,
+  including predicted ESI, model/safety final ESI, confidence, probabilities,
+  safety rules, recommendation, explanation, clinician summary, and final source
+- `latest_clinician_review`: latest clinician review decision, clinician final
+  ESI, override reason/review note, reviewer ID, review ID, reviewed flag, and
+  timestamp
+- `audit_trail`: derived assessment/prediction events plus saved audit-log rows
+  such as clinician review actions
 
 ## Clinician Review
 
@@ -179,13 +189,17 @@ Returns `404` when the assessment does not exist. Successful responses include
 
 `GET /dashboard/summary`
 
-Returns database-backed dashboard counts:
+Returns database-backed dashboard counts and recent assessment rows:
 
 ```json
 {
   "total_assessments": 0,
+  "model_predictions_generated": 0,
+  "reviewed_assessments": 0,
   "pending_reviews": 0,
   "completed_reviews": 0,
+  "override_count": 0,
+  "most_common_final_esi": null,
   "high_risk_flags": 0,
   "esi_distribution": {},
   "recent_assessments": [],
@@ -193,8 +207,16 @@ Returns database-backed dashboard counts:
 }
 ```
 
-`high_risk_flags` and `esi_distribution` are based on the latest stored
-prediction `final_esi` when available.
+`high_risk_flags` and `esi_distribution` are based on the effective latest final
+ESI: clinician final ESI when reviewed, otherwise model/safety final ESI when a
+prediction exists. The model predicts ESI 3-5, while clinician final ESI can be
+1-5 through human-in-the-loop review. Override reviews are counted in
+`override_count` and recent rows expose `final_source: clinician_override`.
+
+Recent assessment rows include assessment ID, patient ID, age, sex, chief
+complaint, status, created timestamp, predicted ESI, model final ESI, effective
+final ESI, clinician final ESI, clinician decision, final source, and
+confidence.
 
 ## Reports
 

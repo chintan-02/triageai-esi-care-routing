@@ -106,6 +106,31 @@ def get_latest_prediction_for_assessment(
     return db.scalars(statement).first()
 
 
+def get_latest_clinician_review_for_assessment(
+    db: Session,
+    assessment_id: str,
+) -> ClinicianReview | None:
+    statement = (
+        select(ClinicianReview)
+        .where(ClinicianReview.assessment_id == assessment_id)
+        .order_by(ClinicianReview.created_at.desc())
+        .limit(1)
+    )
+    return db.scalars(statement).first()
+
+
+def list_audit_logs_for_assessment(
+    db: Session,
+    assessment_id: str,
+) -> list[AuditLog]:
+    statement = (
+        select(AuditLog)
+        .where(AuditLog.assessment_id == assessment_id)
+        .order_by(AuditLog.created_at.asc())
+    )
+    return list(db.scalars(statement).all())
+
+
 def create_clinician_review(
     db: Session,
     review_request: ClinicianReviewRequest,
@@ -202,35 +227,82 @@ def get_dashboard_summary(db: Session) -> dict[str, Any]:
     for prediction in predictions:
         latest_by_assessment.setdefault(prediction.assessment_id, prediction)
 
+    reviews = list(
+        db.scalars(
+            select(ClinicianReview).order_by(
+                ClinicianReview.assessment_id.asc(),
+                ClinicianReview.created_at.desc(),
+            )
+        ).all()
+    )
+    latest_review_by_assessment: dict[str, ClinicianReview] = {}
+    override_count = 0
+    for review in reviews:
+        latest_review_by_assessment.setdefault(review.assessment_id, review)
+        if review.action == "override":
+            override_count += 1
+
     esi_distribution: dict[str, int] = {}
     high_risk_flags = 0
-    for prediction in latest_by_assessment.values():
-        if prediction.final_esi is None:
+    for assessment_id, prediction in latest_by_assessment.items():
+        latest_review = latest_review_by_assessment.get(assessment_id)
+        final_esi = latest_review.final_esi if latest_review else prediction.final_esi
+        if final_esi is None:
             continue
 
-        esi_key = str(prediction.final_esi)
+        esi_key = str(final_esi)
         esi_distribution[esi_key] = esi_distribution.get(esi_key, 0) + 1
-        if prediction.final_esi <= 2:
+        if final_esi <= 2:
             high_risk_flags += 1
+
+    most_common_final_esi = None
+    if esi_distribution:
+        most_common_final_esi = int(
+            max(esi_distribution.items(), key=lambda item: item[1])[0]
+        )
 
     recent_assessments = []
     for assessment in list_recent_assessments(db):
         latest_prediction = latest_by_assessment.get(assessment.id)
+        latest_review = latest_review_by_assessment.get(assessment.id)
+        clinician_final_esi = latest_review.final_esi if latest_review else None
+        effective_final_esi = (
+            clinician_final_esi
+            if clinician_final_esi is not None
+            else latest_prediction.final_esi if latest_prediction else None
+        )
+        final_source = latest_prediction.final_source if latest_prediction else None
+        if latest_review and latest_review.action == "override":
+            final_source = "clinician_override"
         recent_assessments.append(
             {
                 "assessment_id": assessment.id,
                 "patient_id": assessment.patient_id,
+                "patient_age": assessment.patient.age,
+                "sex": assessment.patient.sex,
                 "chief_complaint": assessment.chief_complaint,
                 "status": assessment.status,
                 "created_at": assessment.created_at,
-                "final_esi": latest_prediction.final_esi if latest_prediction else None,
+                "predicted_esi": latest_prediction.predicted_esi if latest_prediction else None,
+                "model_final_esi": latest_prediction.final_esi if latest_prediction else None,
+                "final_esi": effective_final_esi,
+                "clinician_final_esi": clinician_final_esi,
+                "clinician_decision": latest_review.action if latest_review else None,
+                "final_source": final_source,
+                "confidence_score": (
+                    latest_prediction.confidence_score if latest_prediction else None
+                ),
             }
         )
 
     return {
         "total_assessments": total_assessments,
+        "model_predictions_generated": len(latest_by_assessment),
+        "reviewed_assessments": completed_reviews,
         "pending_reviews": pending_reviews,
         "completed_reviews": completed_reviews,
+        "override_count": override_count,
+        "most_common_final_esi": most_common_final_esi,
         "high_risk_flags": high_risk_flags,
         "esi_distribution": esi_distribution,
         "recent_assessments": recent_assessments,

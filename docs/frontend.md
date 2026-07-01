@@ -51,6 +51,21 @@ human-in-the-loop workflow lets clinicians escalate when additional clinical
 context, safety concerns, or patient presentation justify a different final ESI;
 the override reason is required and saved to the audit trail.
 
+The dashboard reads DB-backed workflow history from `GET /dashboard/summary`.
+It shows summary cards, final ESI distribution, review status, override count,
+recent assessments, and filters for status, ESI, clinician decision, and search
+by chief complaint or assessment ID. It does not show fake rows when the
+database is empty.
+
+The assessment detail page reads `GET /assessments/{assessment_id}`. It can load
+from a dashboard-selected assessment ID, manual input, or the latest prediction
+session state. Detail view shows intake, vitals, latest model prediction,
+probabilities, safety rules, recommendation, explanation, clinician summary,
+latest clinician review, override reason or review note, and audit timeline
+events. The model predicts ESI 3-5, while clinician final ESI can be 1-5 through
+review; overrides require a reason and are shown as audit-visible workflow
+events.
+
 If the backend is unavailable, the sidebar shows:
 
 ```bash

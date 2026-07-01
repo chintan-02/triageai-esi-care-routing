@@ -121,3 +121,114 @@ def test_submit_clinician_review_formats_validation_error(monkeypatch) -> None:
     assert result["ok"] is False
     assert result["error_type"] == "validation_error"
     assert "clinician decision fields" in result["message"]
+
+
+def test_get_dashboard_summary_parses_backend_response(monkeypatch) -> None:
+    def fake_get(url, timeout):
+        return FakeResponse(
+            200,
+            {
+                "total_assessments": 1,
+                "model_predictions_generated": 1,
+                "reviewed_assessments": 1,
+                "pending_reviews": 0,
+                "completed_reviews": 1,
+                "override_count": 1,
+                "most_common_final_esi": 2,
+                "high_risk_flags": 1,
+                "esi_distribution": {"2": 1},
+                "recent_assessments": [
+                    {
+                        "assessment_id": "assessment-1",
+                        "patient_id": "patient-1",
+                        "patient_age": 42,
+                        "sex": "female",
+                        "chief_complaint": "Chest discomfort",
+                        "status": "review_completed",
+                        "created_at": "2026-06-30T12:00:00Z",
+                        "predicted_esi": 3,
+                        "model_final_esi": 3,
+                        "final_esi": 2,
+                        "clinician_final_esi": 2,
+                        "clinician_decision": "override",
+                        "final_source": "clinician_override",
+                        "confidence_score": 0.78,
+                    }
+                ],
+                "is_placeholder": False,
+            },
+        )
+
+    monkeypatch.setattr(api_client.requests, "get", fake_get)
+
+    result = api_client.get_dashboard_summary()
+
+    assert result["ok"] is True
+    assert result["data"]["override_count"] == 1
+    assert result["data"]["recent_assessments"][0]["final_source"] == "clinician_override"
+
+
+def test_get_assessment_detail_parses_backend_response(monkeypatch) -> None:
+    def fake_get(url, timeout):
+        return FakeResponse(
+            200,
+            {
+                "request_id": "request-1",
+                "assessment_id": "assessment-1",
+                "patient_id": "patient-1",
+                "status": "review_completed",
+                "chief_complaint": "Chest discomfort",
+                "created_at": "2026-06-30T12:00:00Z",
+                "updated_at": "2026-06-30T12:01:00Z",
+                "intake": {
+                    "patient_age": 42,
+                    "chief_complaint": "Chest discomfort",
+                },
+                "latest_prediction": {
+                    "prediction_id": "prediction-1",
+                    "model_loaded": True,
+                    "predicted_esi": 3,
+                    "final_esi": 3,
+                    "confidence_score": 0.78,
+                    "probabilities": {"ESI_3": 0.78, "ESI_4": 0.2, "ESI_5": 0.02},
+                    "safety_rules_triggered": [],
+                    "final_source": "model",
+                    "recommendation": "Urgent evaluation recommended.",
+                    "explanation": "Model explanation.",
+                    "clinician_summary": "Summary.",
+                    "is_placeholder": False,
+                },
+                "latest_clinician_review": {
+                    "review_id": "review-1",
+                    "clinician_id": "clinician-456",
+                    "clinician_decision": "accept",
+                    "clinician_final_esi": 3,
+                    "reviewed": True,
+                },
+                "audit_trail": [{"audit_id": "audit-1", "action": "clinician_review_accept"}],
+                "message": "Assessment loaded from database.",
+                "is_placeholder": False,
+            },
+        )
+
+    monkeypatch.setattr(api_client.requests, "get", fake_get)
+
+    result = api_client.get_assessment_detail("assessment-1")
+
+    assert result["ok"] is True
+    assert result["data"]["assessment_id"] == "assessment-1"
+    assert result["data"]["latest_prediction"]["predicted_esi"] == 3
+    assert result["data"]["latest_clinician_review"]["clinician_decision"] == "accept"
+
+
+def test_get_assessment_detail_formats_not_found(monkeypatch) -> None:
+    def fake_get(url, timeout):
+        return FakeResponse(404, {"detail": "Assessment not found"})
+
+    monkeypatch.setattr(api_client.requests, "get", fake_get)
+
+    result = api_client.get_assessment_detail("missing")
+
+    assert result["ok"] is False
+    assert result["error_type"] == "not_found"
+    assert result["message"] == "Assessment not found"
