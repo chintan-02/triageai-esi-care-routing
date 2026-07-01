@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from pathlib import Path
 
 from app.backend.api.main import app
+from app.backend.services.pdf_service import _details_text, _safety_rule_label
 
 
 client = TestClient(app)
@@ -95,3 +96,30 @@ def test_download_unknown_report_returns_404() -> None:
     response = client.get("/reports/unknown-report/download")
 
     assert response.status_code == 404
+
+
+def test_pdf_safety_rule_labels_are_reader_friendly() -> None:
+    assert _safety_rule_label("oxygen_saturation_below_92") == "Oxygen saturation below 92%"
+    assert _safety_rule_label("oxygen_saturation_below_9 / 2") == "Oxygen saturation below 92%"
+    assert _safety_rule_label("pregnancy_bleeding_red_flag") == "Pregnancy-related risk flag"
+    assert _safety_rule_label("custom_rule_name") == "Custom Rule Name"
+
+
+def test_pdf_audit_details_are_readable_not_raw_json() -> None:
+    details = _details_text(
+        {
+            "payload": {
+                "action": "override",
+                "final_esi": 1,
+                "override_reason": "Emergency",
+                "notes": "Cardiac Arrest",
+            }
+        }
+    )
+
+    assert "Clinician decision: Override" in details
+    assert "Clinician final ESI: 1" in details
+    assert "Override reason: Emergency" in details
+    assert "Review note: Cardiac Arrest" in details
+    assert "{" not in details
+    assert "}" not in details
