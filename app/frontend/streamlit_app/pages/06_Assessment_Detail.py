@@ -14,7 +14,11 @@ from app.frontend.streamlit_app.components.layout import render_backend_status
 from app.frontend.streamlit_app.components.probability_chart import (
     render_probability_section,
 )
-from app.frontend.streamlit_app.services.api_client import get_assessment_detail
+from app.frontend.streamlit_app.services.api_client import (
+    download_report,
+    generate_report,
+    get_assessment_detail,
+)
 
 
 DETAIL_DISCLAIMER = (
@@ -257,7 +261,69 @@ def _render_audit(detail: dict[str, Any]) -> None:
                 "Details": _display_value(details),
             }
         )
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width="stretch", hide_index=True)
+
+
+def _render_report_actions(assessment_id: str) -> None:
+    st.markdown('<div class="section-title">PDF Report</div>', unsafe_allow_html=True)
+    st.caption(
+        "Generate a decision-support summary from persisted intake, model output, "
+        "clinician review, and audit trail data."
+    )
+
+    report_key = f"generated_report_{assessment_id}"
+    if st.button("Generate PDF Report", type="primary", width="stretch"):
+        with st.spinner("Generating PDF report..."):
+            report_result = generate_report(assessment_id)
+
+        if not report_result.get("ok"):
+            st.error(report_result.get("message") or "Report generation failed.")
+            if report_result.get("error_type") == "connection":
+                st.code(report_result.get("start_command", ""), language="bash")
+            details = report_result.get("data")
+            if details:
+                st.json(details)
+            st.session_state.pop(report_key, None)
+            return
+
+        report_data = report_result["data"]
+        stored_report = {
+            "metadata": report_data,
+            "content": None,
+            "download_error": None,
+        }
+        report_id = report_data.get("report_id")
+        if report_id:
+            download_result = download_report(report_id)
+            if download_result.get("ok"):
+                stored_report["content"] = download_result["data"]["content"]
+            else:
+                stored_report["download_error"] = (
+                    download_result.get("message") or "Report download failed."
+                )
+        st.session_state[report_key] = stored_report
+
+    stored_report = st.session_state.get(report_key)
+    if not stored_report:
+        return
+
+    metadata = stored_report.get("metadata") or {}
+    file_name = metadata.get("file_name") or "triageai_report.pdf"
+    st.success(metadata.get("message") or "PDF report generated.")
+    if stored_report.get("content"):
+        st.download_button(
+            "Download PDF Report",
+            data=stored_report["content"],
+            file_name=file_name,
+            mime="application/pdf",
+            width="stretch",
+        )
+    else:
+        if stored_report.get("download_error"):
+            st.warning(stored_report["download_error"], icon="⚠️")
+        file_path = metadata.get("file_path")
+        if file_path:
+            st.info(f"Generated report saved at: {file_path}")
 
 
 st.set_page_config(page_title="Assessment Detail | TriageAI", layout="wide")
@@ -314,20 +380,21 @@ _render_snapshot(detail)
 _render_prediction(detail)
 _render_review(detail)
 _render_audit(detail)
+_render_report_actions(detail.get("assessment_id") or assessment_id.strip())
 
 nav_cols = st.columns([1, 1, 1], gap="medium")
 with nav_cols[0]:
-    if st.button("Back to Dashboard", use_container_width=True):
+    if st.button("Back to Dashboard", width="stretch"):
         st.switch_page("pages/05_Dashboard.py")
 with nav_cols[1]:
     latest_prediction = _prediction_for_session(detail)
     if detail.get("status") != "review_completed" and latest_prediction:
-        if st.button("Go to Clinician Review", type="primary", use_container_width=True):
+        if st.button("Go to Clinician Review", type="primary", width="stretch"):
             st.session_state["latest_prediction_response"] = latest_prediction
             st.session_state["latest_intake_payload"] = detail.get("intake") or {}
             st.switch_page("pages/04_Clinician_Review.py")
 with nav_cols[2]:
     latest_result = st.session_state.get("latest_prediction_response")
     if latest_result:
-        if st.button("Go to Result", use_container_width=True):
+        if st.button("Go to Result", width="stretch"):
             st.switch_page("pages/03_Result.py")

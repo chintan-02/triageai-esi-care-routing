@@ -16,6 +16,8 @@ START_BACKEND_COMMAND = (
 __all__ = [
     "BACKEND_URL",
     "START_BACKEND_COMMAND",
+    "download_report",
+    "generate_report",
     "get_assessment_detail",
     "get_dashboard_summary",
     "get_ready_status",
@@ -179,6 +181,122 @@ def get_assessment_detail(
         "backend_connected": True,
         "status_code": response.status_code,
         "data": body,
+        "error_type": None,
+        "message": None,
+        "start_command": START_BACKEND_COMMAND,
+    }
+
+
+def generate_report(
+    assessment_id: str,
+    include_audit: bool = True,
+    base_url: str = BACKEND_URL,
+) -> dict[str, Any]:
+    """Generate a PDF report for an assessment and return metadata."""
+    try:
+        response = requests.post(
+            _backend_url(base_url, "/reports/generate"),
+            json={"assessment_id": assessment_id, "include_audit": include_audit},
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.Timeout:
+        return _request_error(
+            f"Report generation timed out after {REQUEST_TIMEOUT_SECONDS} seconds.",
+            "timeout",
+        )
+    except requests.RequestException:
+        return _request_error(
+            f"Backend is not running on {base_url}",
+            "connection",
+        )
+
+    body = _response_json(response)
+    if response.status_code == 404:
+        return {
+            "ok": False,
+            "backend_connected": True,
+            "status_code": response.status_code,
+            "data": body,
+            "error_type": "not_found",
+            "message": body.get("detail", "Assessment was not found."),
+            "start_command": START_BACKEND_COMMAND,
+        }
+
+    if response.status_code >= 400:
+        return {
+            "ok": False,
+            "backend_connected": True,
+            "status_code": response.status_code,
+            "data": body,
+            "error_type": "backend_error",
+            "message": body.get("detail", "Report generation failed."),
+            "start_command": START_BACKEND_COMMAND,
+        }
+
+    return {
+        "ok": True,
+        "backend_connected": True,
+        "status_code": response.status_code,
+        "data": body,
+        "error_type": None,
+        "message": None,
+        "start_command": START_BACKEND_COMMAND,
+    }
+
+
+def download_report(
+    report_id: str,
+    base_url: str = BACKEND_URL,
+) -> dict[str, Any]:
+    """Download generated report bytes from the backend."""
+    try:
+        response = requests.get(
+            _backend_url(base_url, f"/reports/{report_id}/download"),
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.Timeout:
+        return _request_error(
+            f"Report download timed out after {REQUEST_TIMEOUT_SECONDS} seconds.",
+            "timeout",
+        )
+    except requests.RequestException:
+        return _request_error(
+            f"Backend is not running on {base_url}",
+            "connection",
+        )
+
+    if response.status_code == 404:
+        body = _response_json(response)
+        return {
+            "ok": False,
+            "backend_connected": True,
+            "status_code": response.status_code,
+            "data": body,
+            "error_type": "not_found",
+            "message": body.get("detail", "Report was not found."),
+            "start_command": START_BACKEND_COMMAND,
+        }
+
+    if response.status_code >= 400:
+        body = _response_json(response)
+        return {
+            "ok": False,
+            "backend_connected": True,
+            "status_code": response.status_code,
+            "data": body,
+            "error_type": "backend_error",
+            "message": body.get("detail", "Report download failed."),
+            "start_command": START_BACKEND_COMMAND,
+        }
+
+    return {
+        "ok": True,
+        "backend_connected": True,
+        "status_code": response.status_code,
+        "data": {
+            "content": response.content,
+            "content_type": response.headers.get("content-type", "application/pdf"),
+        },
         "error_type": None,
         "message": None,
         "start_command": START_BACKEND_COMMAND,

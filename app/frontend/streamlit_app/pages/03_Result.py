@@ -128,11 +128,11 @@ render_main_result_card(result)
 
 review_col, dashboard_col = st.columns([1, 1], gap="medium")
 with review_col:
-    if st.button("Proceed to Clinician Review", type="primary", use_container_width=True):
+    if st.button("Proceed to Clinician Review", type="primary", width="stretch"):
         st.session_state["latest_prediction_response"] = result
         st.switch_page("pages/04_Clinician_Review.py")
 with dashboard_col:
-    if st.button("Go to Dashboard", use_container_width=True):
+    if st.button("Go to Dashboard", width="stretch"):
         st.switch_page("pages/05_Dashboard.py")
 
 _html_card(

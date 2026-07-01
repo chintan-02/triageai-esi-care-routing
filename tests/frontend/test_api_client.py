@@ -2,9 +2,17 @@ from app.frontend.streamlit_app.services import api_client
 
 
 class FakeResponse:
-    def __init__(self, status_code: int, payload: dict):
+    def __init__(
+        self,
+        status_code: int,
+        payload: dict,
+        content: bytes = b"",
+        headers: dict | None = None,
+    ):
         self.status_code = status_code
         self._payload = payload
+        self.content = content
+        self.headers = headers or {}
         self.text = ""
 
     def json(self) -> dict:
@@ -232,3 +240,67 @@ def test_get_assessment_detail_formats_not_found(monkeypatch) -> None:
     assert result["ok"] is False
     assert result["error_type"] == "not_found"
     assert result["message"] == "Assessment not found"
+
+
+def test_generate_report_posts_assessment_id(monkeypatch) -> None:
+    posted = {}
+
+    def fake_post(url, json, timeout):
+        posted["url"] = url
+        posted["json"] = json
+        return FakeResponse(
+            200,
+            {
+                "report_id": "report-1",
+                "assessment_id": "assessment-1",
+                "file_name": "triageai_report_report-1.pdf",
+                "file_path": "reports/generated/triageai_report_report-1.pdf",
+                "status": "generated",
+                "report_status": "generated",
+                "download_url": "/reports/report-1/download",
+                "created_at": "2026-06-30T12:00:00Z",
+                "message": "PDF report generated for assessment decision-support review.",
+                "is_placeholder": False,
+            },
+        )
+
+    monkeypatch.setattr(api_client.requests, "post", fake_post)
+
+    result = api_client.generate_report("assessment-1")
+
+    assert posted["url"].endswith("/reports/generate")
+    assert posted["json"] == {"assessment_id": "assessment-1", "include_audit": True}
+    assert result["ok"] is True
+    assert result["data"]["is_placeholder"] is False
+    assert result["data"]["download_url"] == "/reports/report-1/download"
+
+
+def test_generate_report_formats_not_found(monkeypatch) -> None:
+    def fake_post(url, json, timeout):
+        return FakeResponse(404, {"detail": "Assessment not found"})
+
+    monkeypatch.setattr(api_client.requests, "post", fake_post)
+
+    result = api_client.generate_report("missing")
+
+    assert result["ok"] is False
+    assert result["error_type"] == "not_found"
+    assert result["message"] == "Assessment not found"
+
+
+def test_download_report_returns_pdf_bytes(monkeypatch) -> None:
+    def fake_get(url, timeout):
+        return FakeResponse(
+            200,
+            {},
+            content=b"%PDF-1.4 report bytes",
+            headers={"content-type": "application/pdf"},
+        )
+
+    monkeypatch.setattr(api_client.requests, "get", fake_get)
+
+    result = api_client.download_report("report-1")
+
+    assert result["ok"] is True
+    assert result["data"]["content"].startswith(b"%PDF")
+    assert result["data"]["content_type"] == "application/pdf"

@@ -364,8 +364,8 @@ if submitted:
 
 nav_left, nav_right = st.columns([1, 1], gap="medium")
 with nav_left:
-    if st.button("Back to Result", use_container_width=True):
+    if st.button("Back to Result", width="stretch"):
         st.switch_page("pages/03_Result.py")
 with nav_right:
-    if st.button("Go to Dashboard", use_container_width=True):
+    if st.button("Go to Dashboard", width="stretch"):
         st.switch_page("pages/05_Dashboard.py")

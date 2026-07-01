@@ -226,7 +226,7 @@ with right:
     else:
         st.dataframe(
             _table_rows(filtered_rows),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -243,7 +243,7 @@ with right:
         )
         action_cols = st.columns([1, 1], gap="medium")
         with action_cols[0]:
-            if st.button("Load Assessment Detail", type="primary", use_container_width=True):
+            if st.button("Load Assessment Detail", type="primary", width="stretch"):
                 st.session_state["selected_assessment_id"] = assessment_options[selected_label]
                 st.switch_page("pages/06_Assessment_Detail.py")
         with action_cols[1]:
@@ -253,6 +253,6 @@ with right:
                 if row.get("assessment_id") == assessment_options[selected_label]
             )
             if selected_row.get("status") != "review_completed":
-                if st.button("Open Detail for Review", use_container_width=True):
+                if st.button("Open Detail for Review", width="stretch"):
                     st.session_state["selected_assessment_id"] = assessment_options[selected_label]
                     st.switch_page("pages/06_Assessment_Detail.py")
