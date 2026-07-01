@@ -227,6 +227,36 @@ Accepts:
 - `assessment_id`
 - `include_audit`: boolean, default `true`
 
-Verifies the assessment exists and stores report metadata with status `queued`.
-No PDF is generated yet, so the response keeps `is_placeholder: true` and
-`download_url: null`. Returns `404` when the assessment does not exist.
+Verifies the assessment exists, loads persisted assessment data, latest
+prediction, latest clinician review, and audit logs, then generates a local PDF
+decision-support report under `reports/generated/`. Returns `404` when the
+assessment does not exist.
+
+Successful response:
+
+```json
+{
+  "report_id": "report-id",
+  "assessment_id": "assessment-id",
+  "file_name": "triageai_report_report-id.pdf",
+  "file_path": "reports/generated/triageai_report_report-id.pdf",
+  "status": "generated",
+  "report_status": "generated",
+  "download_url": "/reports/report-id/download",
+  "created_at": "2026-06-30T12:00:00Z",
+  "message": "PDF report generated for assessment decision-support review.",
+  "is_placeholder": false
+}
+```
+
+The PDF includes the intake snapshot, model output, ESI 3-5 probabilities,
+safety-rule summary, recommendation, clinical explanation, clinician summary,
+latest clinician review if present, audit trail when requested, and the
+decision-support disclaimer. It does not include CTAS/KTAS terminology,
+diagnosis language, fake metrics, or raw model internals intended only for
+implementation debugging.
+
+`GET /reports/{report_id}/download`
+
+Returns the generated PDF as `application/pdf` for a known report ID. Returns
+`404` when the report record or generated file does not exist.

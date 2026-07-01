@@ -66,6 +66,19 @@ events. The model predicts ESI 3-5, while clinician final ESI can be 1-5 through
 review; overrides require a reason and are shown as audit-visible workflow
 events.
 
+Assessment Detail also provides **Generate PDF Report**. The button calls
+`POST /reports/generate` for the selected assessment and, on success, downloads
+the generated PDF from `GET /reports/{report_id}/download` into a Streamlit
+download button. If the download endpoint is unavailable after generation, the
+UI shows the saved local file path returned by the backend. Report failures are
+shown as errors, not fake success states.
+
+Generated PDFs are written under `reports/generated/` and are ignored by git.
+The report is a decision-support workflow summary only. It includes persisted
+intake, model output, ESI probabilities, safety rules, clinician review when
+present, audit trail, and disclaimer text; it must not be read as diagnosis or
+as an autonomous clinical decision.
+
 If the backend is unavailable, the sidebar shows:
 
 ```bash

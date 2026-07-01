@@ -16,6 +16,7 @@ data/processed/*
 model_artifacts/*.joblib
 model_artifacts/*.pkl
 legacy/khushal_reference/**/__pycache__/
+reports/generated/*.pdf
 
 # Legacy Khushal reference - avoid committing old datasets/models/logs/results
 legacy/khushal_reference/data/*

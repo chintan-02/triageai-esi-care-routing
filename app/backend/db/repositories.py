@@ -196,6 +196,27 @@ def create_report_record(db: Session, report_request: ReportRequest) -> Report:
     return report
 
 
+def update_report_record(
+    db: Session,
+    report_id: str,
+    report_status: str,
+    download_url: str | None = None,
+) -> Report | None:
+    report = db.get(Report, report_id)
+    if report is None:
+        return None
+
+    report.report_status = report_status
+    report.download_url = download_url
+    db.commit()
+    db.refresh(report)
+    return report
+
+
+def get_report_by_id(db: Session, report_id: str) -> Report | None:
+    return db.get(Report, report_id)
+
+
 def get_dashboard_summary(db: Session) -> dict[str, Any]:
     total_assessments = db.scalar(select(func.count()).select_from(Assessment)) or 0
     pending_reviews = (

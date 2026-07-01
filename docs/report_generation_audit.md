@@ -269,4 +269,14 @@ Avoid:
   decision when a clinician review exists.
 - Treat clinician final ESI as the documented human review outcome.
 - Include audit events for demo and portfolio value, but keep them readable.
-- Keep the current placeholder report route unchanged until Phase 8B.
+- Phase 8B should replace the placeholder report route with real generated PDF
+  output while preserving decision-support wording.
+
+## Phase 8B Implementation Notes
+
+- Generate PDFs under `reports/generated/`.
+- Do not commit generated PDF artifacts.
+- Prefer `GET /reports/{report_id}/download` over exposing arbitrary file paths
+  as a download mechanism.
+- Assessment Detail should be the primary frontend entry point for generating
+  an assessment report.

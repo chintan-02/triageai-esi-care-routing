@@ -6,6 +6,7 @@ pydantic-settings
 python-dotenv
 streamlit
 requests
+reportlab
 sqlalchemy
 pandas
 numpy

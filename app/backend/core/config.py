@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     THRESHOLDS_PATH: str = "model_artifacts/thresholds.json"
     FEATURE_SCHEMA_PATH: str = "model_artifacts/feature_schema.json"
     MODEL_METADATA_PATH: str = "model_artifacts/model_metadata.json"
+    REPORT_OUTPUT_DIR: str = "reports/generated"
     AZURE_SPEECH_KEY: str = ""
     AZURE_SPEECH_REGION: str = ""
     SMTP_HOST: str = ""
