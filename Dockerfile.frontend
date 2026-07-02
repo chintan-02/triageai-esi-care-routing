@@ -1,9 +1,16 @@
 FROM python:3.11-slim
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
+
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+COPY app ./app
+COPY pyproject.toml README.md ./
 
 EXPOSE 8501
-CMD ["streamlit", "run", "app/frontend/streamlit_app/Home.py", "--server.address", "0.0.0.0"]
+CMD ["streamlit", "run", "app/frontend/streamlit_app/Home.py", "--server.address=0.0.0.0", "--server.port=8501"]

@@ -23,6 +23,7 @@ python scripts/api_smoke_test.py --base-url http://127.0.0.1:8001
 - PDF decision-support summary generation and download checks for non-empty PDF artifacts.
 - Demo reset/seed script safety checks using local/test SQLite patterns so tests do not destroy a developer's real local database.
 - A local API smoke-test script that checks `/health`, `/ready`, and a safe sample `/predict` request.
+- `/ready` returns HTTP 200 only when required app components are available; otherwise it returns a stable not-ready response for deployment checks.
 
 ## Intentionally Not Covered Yet
 
