@@ -41,6 +41,11 @@ Expected local URLs:
 - Backend: http://127.0.0.1:8001
 - Frontend: http://127.0.0.1:8501
 
+Docker Compose uses named volumes for local SQLite data and generated PDF reports:
+
+- `triageai_sqlite_data` mounted at `/app/data`
+- `triageai_reports` mounted at `/app/reports/generated`
+
 ## Smoke Test
 
 With the backend running, verify the API:
@@ -66,6 +71,29 @@ This command is intended for local SQLite demo databases only. It backs up exist
 Use `.env.example` as a non-secret reference for local settings. The Docker Compose stack sets demo-safe values directly and stores SQLite/report output in Docker volumes. Do not commit real secrets.
 
 The frontend reads `TRIAGEAI_BACKEND_URL`; Docker Compose sets it to `http://backend:8001` so the Streamlit container can reach the FastAPI service.
+
+Key local settings:
+
+- `APP_ENV`: environment label, such as `development` or `demo`.
+- `LOG_LEVEL`: optional logging verbosity label for local runs.
+- `DEMO_MODE`: marks local demo behavior when set to `true`.
+- `DATABASE_URL`: local SQLite database URL.
+- `TRIAGEAI_BACKEND_URL`: backend API base URL used by the Streamlit frontend.
+- `MODEL_PATH`, `THRESHOLDS_PATH`, `FEATURE_SCHEMA_PATH`, and `MODEL_METADATA_PATH`: model artifact paths used by backend readiness and prediction.
+
+## Troubleshooting
+
+If port `8001` or `8501` is already in use, stop the conflicting local process or update the host-side port mapping in `docker-compose.yml`. Keep the container ports as `8001` for the backend and `8501` for Streamlit unless the app commands are also changed.
+
+If `/ready` does not pass, check the backend logs:
+
+```bash
+docker compose logs backend
+```
+
+The most common readiness issues are missing model artifacts, dependency installation problems, or an unavailable SQLite volume path.
+
+If the frontend cannot reach the backend inside Docker, confirm `TRIAGEAI_BACKEND_URL=http://backend:8001` is set for the frontend service.
 
 ## Notes
 
