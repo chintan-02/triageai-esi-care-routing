@@ -40,6 +40,10 @@ def test_generate_report_creates_pdf_file_for_prediction() -> None:
     assert file_path.exists()
     assert file_path.stat().st_size > 0
 
+    detail_response = client.get(f"/assessments/{assessment_id}")
+    audit_actions = [event["action"] for event in detail_response.json()["audit_trail"]]
+    assert "report_generated" in audit_actions
+
 
 def test_generate_report_does_not_require_clinician_review() -> None:
     create_response = client.post("/assessments", json=valid_intake_payload())

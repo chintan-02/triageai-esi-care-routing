@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from app.backend.db.session import SessionLocal
 from scripts import demo_reset_seed
 
 
@@ -16,6 +17,19 @@ def test_sqlite_db_path_accepts_local_sqlite_url(tmp_path: Path) -> None:
 def test_sqlite_db_path_rejects_non_sqlite_url() -> None:
     with pytest.raises(ValueError, match="Refusing non-SQLite"):
         demo_reset_seed.sqlite_db_path("postgresql://user:pass@example.com/db")
+
+
+def test_backup_database_copies_existing_sqlite_file(tmp_path: Path) -> None:
+    db_path = tmp_path / "demo.sqlite"
+    db_path.write_bytes(b"sqlite-data")
+    backup_dir = tmp_path / "backups"
+
+    backup_path = demo_reset_seed.backup_database(db_path, backup_dir=backup_dir)
+
+    assert backup_path is not None
+    assert backup_path.parent == backup_dir
+    assert backup_path.name.startswith("triageai_demo_backup_")
+    assert backup_path.read_bytes() == b"sqlite-data"
 
 
 def test_reset_requires_yes(monkeypatch, capsys) -> None:
@@ -47,3 +61,17 @@ def test_demo_seed_payloads_are_valid() -> None:
     assert cases[2].review_action == "override"
     assert cases[2].override_reason
     assert cases[4].review_action is None
+
+
+def test_seed_demo_data_creates_expected_isolated_cases() -> None:
+    with SessionLocal() as db:
+        summaries = demo_reset_seed.seed_demo_data(db)
+
+    assert len(summaries) == 5
+    assert {summary["status"] for summary in summaries} == {
+        "pending_review",
+        "review_completed",
+    }
+    assert summaries[1]["safety_rules_triggered"]
+    assert summaries[2]["clinician_decision"] == "override"
+    assert summaries[4]["clinician_decision"] == "pending"

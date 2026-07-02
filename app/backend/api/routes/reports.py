@@ -52,6 +52,18 @@ def generate_report(
         download_url=download_url,
     )
     report_record = updated_report or report_record
+    repositories.create_audit_log(
+        db=db,
+        assessment_id=report.assessment_id,
+        actor_id=None,
+        action="report_generated",
+        details={
+            "report_id": report_record.id,
+            "report_status": report_record.report_status,
+            "include_audit": report.include_audit,
+            "download_url": report_record.download_url,
+        },
+    )
 
     return ReportResponse(
         report_id=report_record.id,
