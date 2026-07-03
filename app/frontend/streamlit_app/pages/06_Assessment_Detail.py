@@ -9,7 +9,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from app.frontend.streamlit_app.assets.styles import apply_app_styles
 from app.frontend.streamlit_app.components.layout import render_backend_status
 from app.frontend.streamlit_app.components.probability_chart import (
     render_probability_section,
@@ -19,11 +18,18 @@ from app.frontend.streamlit_app.services.api_client import (
     generate_report,
     get_assessment_detail,
 )
+from app.frontend.streamlit_app.ui_theme import (
+    apply_theme,
+    render_disclaimer,
+    render_empty_state,
+    render_page_header,
+    render_top_header,
+)
 
 
 DETAIL_DISCLAIMER = (
     "This detail view is for clinical decision-support workflow review and audit "
-    "visibility only. It is not a diagnosis or a substitute for clinician judgment."
+    "visibility only and does not replace clinician judgment."
 )
 
 MODEL_VS_CLINICIAN_NOTE = (
@@ -105,7 +111,10 @@ def _prediction_for_session(detail: dict[str, Any]) -> dict[str, Any] | None:
 
 def _render_snapshot(detail: dict[str, Any]) -> None:
     intake = detail.get("intake") or {}
-    st.markdown('<div class="section-title">Patient / Intake Snapshot</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Patient / Intake Snapshot</div>',
+        unsafe_allow_html=True,
+    )
     cols = st.columns(5)
     cols[0].metric("Age", _display_value(intake.get("patient_age")))
     cols[1].metric("Gender/Sex", _display_value(intake.get("sex")))
@@ -177,7 +186,9 @@ def _render_safety_rules(prediction: dict[str, Any]) -> None:
 
 def _render_prediction(detail: dict[str, Any]) -> None:
     prediction = detail.get("latest_prediction")
-    st.markdown('<div class="section-title">Model Prediction</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Model Prediction</div>', unsafe_allow_html=True
+    )
     if not prediction:
         st.info("No model prediction is stored for this assessment yet.")
         return
@@ -198,17 +209,23 @@ def _render_prediction(detail: dict[str, Any]) -> None:
     with right:
         _render_safety_rules(prediction)
 
-    st.markdown('<div class="section-title">Recommendation</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Recommendation</div>', unsafe_allow_html=True
+    )
     st.markdown(
         f'<div class="note-box">{escape(_display_value(prediction.get("recommendation")))}</div>',
         unsafe_allow_html=True,
     )
-    st.markdown('<div class="section-title">Clinical Explanation</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Clinical Explanation</div>', unsafe_allow_html=True
+    )
     st.markdown(
         f'<div class="note-box">{escape(_display_value(prediction.get("explanation")))}</div>',
         unsafe_allow_html=True,
     )
-    st.markdown('<div class="section-title">Clinician Summary</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Clinician Summary</div>', unsafe_allow_html=True
+    )
     st.markdown(
         f'<div class="note-box">{escape(_display_value(prediction.get("clinician_summary")))}</div>',
         unsafe_allow_html=True,
@@ -218,7 +235,9 @@ def _render_prediction(detail: dict[str, Any]) -> None:
 def _render_review(detail: dict[str, Any]) -> None:
     review = detail.get("latest_clinician_review")
     prediction = detail.get("latest_prediction") or {}
-    st.markdown('<div class="section-title">Clinician Review</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Clinician Review</div>', unsafe_allow_html=True
+    )
     if not review:
         st.warning("This assessment is pending clinician review.", icon="⚠️")
         return
@@ -226,7 +245,9 @@ def _render_review(detail: dict[str, Any]) -> None:
     cols = st.columns(5)
     cols[0].metric("Reviewed", _display_value(review.get("reviewed")))
     cols[1].metric("Decision", _label(review.get("clinician_decision")))
-    cols[2].metric("Clinician final ESI", _display_value(review.get("clinician_final_esi")))
+    cols[2].metric(
+        "Clinician final ESI", _display_value(review.get("clinician_final_esi"))
+    )
     cols[3].metric("Review ID", _display_value(review.get("review_id"))[:8])
     cols[4].metric("Reviewed at", _display_value(review.get("created_at")))
 
@@ -328,25 +349,21 @@ def _render_report_actions(assessment_id: str) -> None:
 
 
 st.set_page_config(page_title="Assessment Detail | TriageAI", layout="wide")
-apply_app_styles()
+apply_theme()
 
-st.markdown(
-    """
-    <div class="clinical-header">
-      <div class="eyebrow">Assessment Detail</div>
-      <h1 style="margin:.1rem 0 .2rem 0;color:#0e1f35;">Persisted Assessment Review</h1>
-      <div style="color:#526070;">Model output, clinician review, and audit context from the database.</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
+with st.sidebar:
+    st.markdown("### TriageAI / SympDirect")
+    st.caption("ESI care-routing workflow")
+    render_backend_status()
+
+render_top_header("Assessment Detail")
+render_page_header(
+    "Persisted Assessment Review",
+    "Model output, clinician review, and audit context from the database.",
+    "Assessment Detail",
 )
 
-render_backend_status()
-
-st.markdown(
-    f'<div class="disclaimer">{escape(DETAIL_DISCLAIMER)}</div>',
-    unsafe_allow_html=True,
-)
+render_disclaimer(DETAIL_DISCLAIMER)
 
 default_assessment_id = _candidate_assessment_id()
 assessment_id = st.text_input(
@@ -356,8 +373,11 @@ assessment_id = st.text_input(
 )
 
 if not assessment_id:
-    st.info("No assessment selected.")
-    st.caption("Open Dashboard to choose an assessment, or paste an assessment ID above.")
+    render_empty_state(
+        "No assessment selected",
+        "Open Dashboard to choose an assessment, or paste an assessment ID above.",
+        "Dashboard",
+    )
     if st.button("Back to Dashboard", type="primary"):
         st.switch_page("pages/05_Dashboard.py")
     st.stop()

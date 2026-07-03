@@ -8,7 +8,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from app.frontend.streamlit_app.assets.styles import apply_app_styles
 from app.frontend.streamlit_app.components.layout import render_backend_status
 from app.frontend.streamlit_app.components.probability_chart import (
     render_probability_section,
@@ -17,11 +16,18 @@ from app.frontend.streamlit_app.components.result_card import render_main_result
 from app.frontend.streamlit_app.components.summary_card import (
     render_clinician_summary_card,
 )
+from app.frontend.streamlit_app.ui_theme import (
+    apply_theme,
+    render_disclaimer,
+    render_empty_state,
+    render_page_header,
+    render_top_header,
+)
 
 
 DISCLAIMER = (
-    "This tool is for clinical decision-support workflow testing only and is not "
-    "a diagnosis or a substitute for clinician judgment."
+    "This tool is for clinical decision-support workflow testing only and does "
+    "not replace clinician judgment."
 )
 
 
@@ -38,7 +44,9 @@ def _html_card(title: str, body: str, *, class_name: str = "clinical-card") -> N
 
 
 def _render_safety_section(result: dict) -> None:
-    st.markdown('<div class="section-title">Safety Review</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Safety Review</div>', unsafe_allow_html=True
+    )
     safety_rules = result.get("safety_rules_triggered") or []
     triggered = [rule for rule in safety_rules if rule.get("triggered")]
 
@@ -82,29 +90,30 @@ def _render_model_details(result: dict) -> None:
 
 
 st.set_page_config(page_title="Assessment Result | TriageAI", layout="wide")
-apply_app_styles()
+apply_theme()
 
-st.markdown(
-    """
-    <div class="clinical-header">
-      <div class="eyebrow">Assessment Result</div>
-      <h1 style="margin:.1rem 0 .2rem 0;color:#0e1f35;">ESI Decision-Support Output</h1>
-      <div style="color:#526070;">Backend-generated model result prepared for clinician review.</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
+with st.sidebar:
+    st.markdown("### TriageAI / SympDirect")
+    st.caption("ESI care-routing workflow")
+    render_backend_status()
+
+render_top_header("Result Review")
+render_page_header(
+    "ESI Decision-Support Output",
+    "Backend-generated model result prepared for clinician review.",
+    "Assessment Result",
 )
 
-render_backend_status()
-
-result = (
-    st.session_state.get("latest_prediction_response")
-    or st.session_state.get("last_prediction_result")
+result = st.session_state.get("latest_prediction_response") or st.session_state.get(
+    "last_prediction_result"
 )
 
 if not result:
-    st.info("No assessment result is available yet. Submit a new intake first.")
-    st.caption("Open New Assessment from the sidebar, enter intake details, and run triage assessment.")
+    render_empty_state(
+        "No assessment result yet",
+        "Start a new assessment to generate ESI decision-support output.",
+        "New Assessment",
+    )
     if st.button("Go to New Assessment", type="primary"):
         try:
             st.switch_page("pages/02_New_Assessment.py")
@@ -112,10 +121,7 @@ if not result:
             st.stop()
     st.stop()
 
-st.markdown(
-    f'<div class="disclaimer">{escape(DISCLAIMER)}</div>',
-    unsafe_allow_html=True,
-)
+render_disclaimer(DISCLAIMER)
 
 if result.get("model_loaded") is False or result.get("is_placeholder") is True:
     st.markdown(
@@ -149,7 +155,9 @@ with left:
 with right:
     _render_safety_section(result)
 
-st.markdown('<div class="section-title">Clinical Explanation</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="section-title">Clinical Explanation</div>', unsafe_allow_html=True
+)
 st.markdown(
     f'<div class="note-box">{escape(result.get("explanation") or "No explanation returned.")}</div>',
     unsafe_allow_html=True,

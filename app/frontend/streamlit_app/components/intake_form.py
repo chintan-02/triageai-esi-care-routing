@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.frontend.streamlit_app.ui_theme import render_section_label
+
 
 ARRIVAL_MODES = [
     "Walk-in",
@@ -26,65 +28,91 @@ def _optional_intake_context(flags: dict[str, bool], free_text: str) -> str | No
 def render_intake_form() -> tuple[bool, dict]:
     """Render the intake form and return submitted state plus backend payload."""
     with st.form("triage_intake_form"):
-        st.subheader("Patient Intake")
         st.caption("Enter intake information available before clinician review.")
 
-        left, right = st.columns(2)
-        with left:
-            patient_age = st.number_input("Age", min_value=0, max_value=120, value=45)
-            gender = st.selectbox("Gender", ["", "Female", "Male", "Other"], index=0)
+        patient_card = st.container(border=True)
+        with patient_card:
+            render_section_label("Patient Information")
+            patient_cols = st.columns([1, 1, 1], gap="medium")
+            with patient_cols[0]:
+                patient_age = st.number_input(
+                    "Age", min_value=0, max_value=120, value=45
+                )
+            with patient_cols[1]:
+                gender = st.selectbox(
+                    "Gender", ["", "Female", "Male", "Other"], index=0
+                )
+            with patient_cols[2]:
+                arrival_mode = st.selectbox("Arrival mode", ARRIVAL_MODES, index=0)
+
+        complaint_card = st.container(border=True)
+        with complaint_card:
+            render_section_label("Chief Complaint")
             chief_complaint = st.text_area(
                 "Chief complaint",
                 value="Chest discomfort",
                 height=90,
             )
             symptom_duration = st.text_input("Symptom duration", value="")
-            arrival_mode = st.selectbox("Arrival mode", ARRIVAL_MODES, index=0)
 
-        with right:
-            heart_rate = st.number_input("Heart rate", min_value=0, max_value=260, value=88)
-            respiratory_rate = st.number_input(
-                "Respiratory rate",
-                min_value=0,
-                max_value=80,
-                value=18,
-            )
-            systolic_bp = st.number_input("Systolic BP", min_value=0, max_value=320, value=128)
-            diastolic_bp = st.number_input("Diastolic BP", min_value=0, max_value=220, value=82)
-            oxygen_saturation = st.number_input(
-                "Oxygen saturation (%)",
-                min_value=0.0,
-                max_value=100.0,
-                value=98.0,
-                step=0.1,
-            )
-            temperature_c = st.number_input(
-                "Temperature (C)",
-                min_value=25.0,
-                max_value=45.0,
-                value=36.8,
-                step=0.1,
-            )
+        vitals_card = st.container(border=True)
+        with vitals_card:
+            render_section_label("Vital Signs")
+            vital_cols = st.columns(3, gap="medium")
+            with vital_cols[0]:
+                heart_rate = st.number_input(
+                    "Heart rate", min_value=0, max_value=260, value=88
+                )
+                systolic_bp = st.number_input(
+                    "Systolic BP", min_value=0, max_value=320, value=128
+                )
+            with vital_cols[1]:
+                respiratory_rate = st.number_input(
+                    "Respiratory rate",
+                    min_value=0,
+                    max_value=80,
+                    value=18,
+                )
+                diastolic_bp = st.number_input(
+                    "Diastolic BP", min_value=0, max_value=220, value=82
+                )
+            with vital_cols[2]:
+                oxygen_saturation = st.number_input(
+                    "Oxygen saturation (%)",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=98.0,
+                    step=0.1,
+                )
+                temperature_c = st.number_input(
+                    "Temperature (C)",
+                    min_value=25.0,
+                    max_value=45.0,
+                    value=36.8,
+                    step=0.1,
+                )
 
-        st.markdown("#### Safety Context")
-        flag_cols = st.columns(3)
-        with flag_cols[0]:
-            pregnancy = st.checkbox("Pregnancy")
-            severe_pain = st.checkbox("Severe pain")
-            altered_mental_status = st.checkbox("Altered mental status")
-        with flag_cols[1]:
-            chest_pain = st.checkbox("Chest pain")
-            shortness_of_breath = st.checkbox("Shortness of breath")
-            active_bleeding = st.checkbox("Active bleeding")
-        with flag_cols[2]:
-            stroke_symptoms = st.checkbox("Stroke-like symptoms")
-            suicidal_ideation = st.checkbox("Suicidal ideation")
-            o2_device = st.checkbox("Supplemental oxygen device")
+        safety_card = st.container(border=True)
+        with safety_card:
+            render_section_label("Safety Context")
+            flag_cols = st.columns(3, gap="medium")
+            with flag_cols[0]:
+                pregnancy = st.checkbox("Pregnancy")
+                severe_pain = st.checkbox("Severe pain")
+                altered_mental_status = st.checkbox("Altered mental status")
+            with flag_cols[1]:
+                chest_pain = st.checkbox("Chest pain")
+                shortness_of_breath = st.checkbox("Shortness of breath")
+                active_bleeding = st.checkbox("Active bleeding")
+            with flag_cols[2]:
+                stroke_symptoms = st.checkbox("Stroke-like symptoms")
+                suicidal_ideation = st.checkbox("Suicidal ideation")
+                o2_device = st.checkbox("Supplemental oxygen device")
 
-        free_text = st.text_area("Additional context", height=80)
-        pain_score = st.slider("Pain score", min_value=0, max_value=10, value=0)
+            free_text = st.text_area("Additional context", height=80)
+            pain_score = st.slider("Pain score", min_value=0, max_value=10, value=0)
 
-        submitted = st.form_submit_button("Run Triage Assessment", type="primary")
+        submitted = st.form_submit_button("Run ESI Assessment", type="primary")
 
     flags = {
         "severe pain": severe_pain,

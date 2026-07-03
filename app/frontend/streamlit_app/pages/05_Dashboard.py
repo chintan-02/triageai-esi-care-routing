@@ -9,14 +9,20 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from app.frontend.streamlit_app.assets.styles import apply_app_styles
 from app.frontend.streamlit_app.components.layout import render_backend_status
 from app.frontend.streamlit_app.services.api_client import get_dashboard_summary
+from app.frontend.streamlit_app.ui_theme import (
+    apply_theme,
+    render_disclaimer,
+    render_empty_state,
+    render_page_header,
+    render_top_header,
+)
 
 
 DASHBOARD_DISCLAIMER = (
-    "This dashboard is for workflow review and audit visibility only. It is not "
-    "a diagnostic tool."
+    "This dashboard is for clinical decision-support workflow review and audit "
+    "visibility only."
 )
 
 
@@ -48,7 +54,11 @@ def _source_label(value: Any) -> str:
 
 
 def _effective_esi(row: dict[str, Any]) -> int | None:
-    return row.get("clinician_final_esi") or row.get("final_esi") or row.get("model_final_esi")
+    return (
+        row.get("clinician_final_esi")
+        or row.get("final_esi")
+        or row.get("model_final_esi")
+    )
 
 
 def _filter_rows(
@@ -63,7 +73,10 @@ def _filter_rows(
     for row in rows:
         if status_filter != "All" and row.get("status") != status_filter:
             continue
-        if decision_filter != "All" and row.get("clinician_decision") != decision_filter:
+        if (
+            decision_filter != "All"
+            and row.get("clinician_decision") != decision_filter
+        ):
             continue
         if esi_filter != "All":
             try:
@@ -108,7 +121,9 @@ def _table_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _render_esi_distribution(distribution: dict[str, int]) -> None:
-    st.markdown('<div class="section-title">ESI Distribution</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">ESI Distribution</div>', unsafe_allow_html=True
+    )
     st.caption(
         "The deployed model predicts ESI 3-5. Safety rules and clinician override "
         "can produce final ESI 1-5 for workflow review."
@@ -131,25 +146,21 @@ def _render_esi_distribution(distribution: dict[str, int]) -> None:
 
 
 st.set_page_config(page_title="Dashboard | TriageAI", layout="wide")
-apply_app_styles()
+apply_theme()
 
-st.markdown(
-    """
-    <div class="clinical-header">
-      <div class="eyebrow">Dashboard</div>
-      <h1 style="margin:.1rem 0 .2rem 0;color:#0e1f35;">Assessment History</h1>
-      <div style="color:#526070;">DB-backed workflow view for ESI output, review status, and audit readiness.</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
+with st.sidebar:
+    st.markdown("### TriageAI / SympDirect")
+    st.caption("ESI care-routing workflow")
+    render_backend_status()
+
+render_top_header("Dashboard")
+render_page_header(
+    "Assessment History",
+    "Workflow view for ESI output, review status, and audit readiness.",
+    "Dashboard",
 )
 
-render_backend_status()
-
-st.markdown(
-    f'<div class="disclaimer">{escape(DASHBOARD_DISCLAIMER)}</div>',
-    unsafe_allow_html=True,
-)
+render_disclaimer(DASHBOARD_DISCLAIMER)
 
 with st.spinner("Loading dashboard summary..."):
     api_result = get_dashboard_summary()
@@ -187,10 +198,15 @@ left, right = st.columns([0.8, 1.2], gap="large")
 with left:
     _render_esi_distribution(summary.get("esi_distribution") or {})
 with right:
-    st.markdown('<div class="section-title">Recent Assessments</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Recent Assessments</div>', unsafe_allow_html=True
+    )
     if not rows:
-        st.info("No assessments have been created yet.")
-        st.caption("Start with New Assessment, then return here to review workflow history.")
+        render_empty_state(
+            "No assessments have been created yet",
+            "Start with New Assessment, then return here to review workflow history.",
+            "New Assessment",
+        )
         if st.button("Go to New Assessment", type="primary"):
             st.switch_page("pages/02_New_Assessment.py")
         st.stop()
@@ -200,7 +216,11 @@ with right:
         {str(row.get("status")) for row in rows if row.get("status")}
     )
     decision_options = ["All"] + sorted(
-        {str(row.get("clinician_decision")) for row in rows if row.get("clinician_decision")}
+        {
+            str(row.get("clinician_decision"))
+            for row in rows
+            if row.get("clinician_decision")
+        }
     )
     status_filter = filter_cols[0].selectbox("Status", status_options)
     esi_filter = filter_cols[1].selectbox(
