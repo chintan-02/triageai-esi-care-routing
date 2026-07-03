@@ -1,6 +1,5 @@
 from pathlib import Path
 import sys
-from html import escape
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -9,14 +8,18 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from app.frontend.streamlit_app.components.layout import render_backend_status
 from app.frontend.streamlit_app.services.api_client import get_dashboard_summary
 from app.frontend.streamlit_app.ui_theme import (
     apply_theme,
+    format_datetime_for_display,
+    humanize_label,
     render_disclaimer,
     render_empty_state,
+    render_fixed_app_nav,
+    render_kpi_grid,
     render_page_header,
-    render_top_header,
+    render_sidebar_navigation,
+    short_id,
 )
 
 
@@ -26,31 +29,14 @@ DASHBOARD_DISCLAIMER = (
 )
 
 
-def _short_id(value: str | None) -> str:
-    if not value:
-        return "Unavailable"
-    return value[:8]
-
-
 def _display_value(value: Any) -> str:
     if value is None or value == "":
         return "Not documented"
     return str(value)
 
 
-def _percent(value: Any) -> str:
-    if value is None:
-        return "Unavailable"
-    try:
-        return f"{float(value) * 100:.1f}%"
-    except (TypeError, ValueError):
-        return "Unavailable"
-
-
 def _source_label(value: Any) -> str:
-    if not value:
-        return "Pending"
-    return str(value).replace("_", " ").title()
+    return humanize_label(value, default="Pending")
 
 
 def _effective_esi(row: dict[str, Any]) -> int | None:
@@ -101,20 +87,20 @@ def _filter_rows(
 def _table_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     table_data = []
     for row in rows:
+        final_source = row.get("final_source")
+        safety_label = (
+            "Escalated" if final_source == "safety_rule_override" else "No escalation"
+        )
         table_data.append(
             {
-                "Created": _display_value(row.get("created_at")),
-                "Assessment": _short_id(row.get("assessment_id")),
+                "Created": format_datetime_for_display(row.get("created_at")),
+                "Case ID": short_id(row.get("assessment_id")),
+                "Chief complaint": _display_value(row.get("chief_complaint")),
+                "Final ESI": _effective_esi(row) or "Pending",
+                "Review status": _source_label(row.get("status")),
+                "Safety": safety_label,
                 "Age": row.get("patient_age"),
                 "Gender": _display_value(row.get("sex")),
-                "Chief complaint": _display_value(row.get("chief_complaint")),
-                "Predicted ESI": row.get("predicted_esi"),
-                "Model final ESI": row.get("model_final_esi"),
-                "Clinician final ESI": row.get("clinician_final_esi"),
-                "Status": _source_label(row.get("status")),
-                "Clinician decision": _source_label(row.get("clinician_decision")),
-                "Final source": _source_label(row.get("final_source")),
-                "Confidence": _percent(row.get("confidence_score")),
             }
         )
     return table_data
@@ -145,15 +131,15 @@ def _render_esi_distribution(distribution: dict[str, int]) -> None:
         st.progress(ratio)
 
 
-st.set_page_config(page_title="Dashboard | TriageAI", layout="wide")
+st.set_page_config(
+    page_title="Dashboard | TriageAI",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 apply_theme()
+render_sidebar_navigation("Dashboard")
 
-with st.sidebar:
-    st.markdown("### TriageAI / SympDirect")
-    st.caption("ESI care-routing workflow")
-    render_backend_status()
-
-render_top_header("Dashboard")
+render_fixed_app_nav("Dashboard", "Workflow Overview")
 render_page_header(
     "Assessment History",
     "Workflow view for ESI output, review status, and audit readiness.",
@@ -177,21 +163,30 @@ if not api_result.get("ok"):
 summary = api_result["data"]
 rows = summary.get("recent_assessments") or []
 
-metric_cols = st.columns(6)
-metric_cols[0].metric("Total assessments", summary.get("total_assessments", 0))
-metric_cols[1].metric(
-    "Model predictions",
-    summary.get("model_predictions_generated", 0),
-)
-metric_cols[2].metric(
-    "Reviewed",
-    summary.get("reviewed_assessments", summary.get("completed_reviews", 0)),
-)
-metric_cols[3].metric("Pending review", summary.get("pending_reviews", 0))
-metric_cols[4].metric("Overrides", summary.get("override_count", 0))
-metric_cols[5].metric(
-    "Common final ESI",
-    _display_value(summary.get("most_common_final_esi")),
+render_kpi_grid(
+    [
+        ("Total assessments", summary.get("total_assessments", 0), None, "blue"),
+        (
+            "Model predictions",
+            summary.get("model_predictions_generated", 0),
+            None,
+            "blue",
+        ),
+        (
+            "Reviewed",
+            summary.get("reviewed_assessments", summary.get("completed_reviews", 0)),
+            None,
+            "green",
+        ),
+        ("Pending review", summary.get("pending_reviews", 0), None, "amber"),
+        ("Overrides", summary.get("override_count", 0), None, "amber"),
+        (
+            "Common final ESI",
+            _display_value(summary.get("most_common_final_esi")),
+            None,
+            "neutral",
+        ),
+    ]
 )
 
 left, right = st.columns([0.8, 1.2], gap="large")
@@ -212,22 +207,32 @@ with right:
         st.stop()
 
     filter_cols = st.columns([1, 1, 1, 1.4], gap="small")
-    status_options = ["All"] + sorted(
+    status_values = sorted(
         {str(row.get("status")) for row in rows if row.get("status")}
     )
-    decision_options = ["All"] + sorted(
+    status_options = ["All"] + status_values
+    decision_values = sorted(
         {
             str(row.get("clinician_decision"))
             for row in rows
             if row.get("clinician_decision")
         }
     )
-    status_filter = filter_cols[0].selectbox("Status", status_options)
+    decision_options = ["All"] + decision_values
+    status_filter = filter_cols[0].selectbox(
+        "Status",
+        status_options,
+        format_func=lambda value: value if value == "All" else humanize_label(value),
+    )
     esi_filter = filter_cols[1].selectbox(
         "Final ESI",
         ["All", "ESI 1", "ESI 2", "ESI 3", "ESI 4", "ESI 5"],
     )
-    decision_filter = filter_cols[2].selectbox("Decision", decision_options)
+    decision_filter = filter_cols[2].selectbox(
+        "Decision",
+        decision_options,
+        format_func=lambda value: value if value == "All" else humanize_label(value),
+    )
     search_text = filter_cols[3].text_input(
         "Search",
         placeholder="Chief complaint or assessment ID",
@@ -251,7 +256,7 @@ with right:
         )
 
     assessment_options = {
-        f"{_short_id(row.get('assessment_id'))} | {_display_value(row.get('chief_complaint'))}": row.get(
+        f"{short_id(row.get('assessment_id'))} | {_display_value(row.get('chief_complaint'))}": row.get(
             "assessment_id"
         )
         for row in filtered_rows
@@ -262,20 +267,27 @@ with right:
             list(assessment_options.keys()),
         )
         selected_assessment_id = assessment_options[selected_label]
-        action_cols = st.columns([1, 1], gap="medium")
+        selected_row = next(
+            row
+            for row in filtered_rows
+            if row.get("assessment_id") == selected_assessment_id
+        )
+        can_review = selected_row.get("status") != "review_completed"
+        action_cols = st.columns([1, 1, 1], gap="medium")
         with action_cols[0]:
-            if st.button("Load Assessment Detail", type="primary", width="stretch"):
+            if st.button("New Assessment", width="stretch"):
+                st.switch_page("pages/02_New_Assessment.py")
+        with action_cols[1]:
+            if st.button("Open Selected Detail", type="primary", width="stretch"):
                 st.session_state["selected_assessment_id"] = selected_assessment_id
                 st.session_state["assessment_detail_id"] = selected_assessment_id
                 st.switch_page("pages/06_Assessment_Detail.py")
-        with action_cols[1]:
-            selected_row = next(
-                row
-                for row in filtered_rows
-                if row.get("assessment_id") == selected_assessment_id
-            )
-            if selected_row.get("status") != "review_completed":
-                if st.button("Open Detail for Review", width="stretch"):
-                    st.session_state["selected_assessment_id"] = selected_assessment_id
-                    st.session_state["assessment_detail_id"] = selected_assessment_id
-                    st.switch_page("pages/06_Assessment_Detail.py")
+        with action_cols[2]:
+            if st.button(
+                "Review Selected Assessment",
+                width="stretch",
+                disabled=not can_review,
+            ):
+                st.session_state["selected_assessment_id"] = selected_assessment_id
+                st.session_state["assessment_detail_id"] = selected_assessment_id
+                st.switch_page("pages/06_Assessment_Detail.py")

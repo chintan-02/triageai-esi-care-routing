@@ -8,7 +8,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from app.frontend.streamlit_app.components.layout import render_backend_status
 from app.frontend.streamlit_app.components.probability_chart import (
     render_probability_section,
 )
@@ -18,10 +17,12 @@ from app.frontend.streamlit_app.components.summary_card import (
 )
 from app.frontend.streamlit_app.ui_theme import (
     apply_theme,
+    humanize_label,
     render_disclaimer,
     render_empty_state,
+    render_fixed_app_nav,
     render_page_header,
-    render_top_header,
+    render_sidebar_navigation,
 )
 
 
@@ -84,20 +85,20 @@ def _render_model_details(result: dict) -> None:
         st.write(f"**Request ID:** `{result.get('request_id') or 'Unavailable'}`")
         st.write(f"**Assessment ID:** `{result.get('assessment_id') or 'Unavailable'}`")
         st.write(f"**Model version:** `{result.get('model_version') or 'Unavailable'}`")
-        st.write(f"**Model loaded:** `{result.get('model_loaded')}`")
-        st.write(f"**Placeholder:** `{result.get('is_placeholder')}`")
-        st.write(f"**Final source:** `{result.get('final_source') or 'Unavailable'}`")
+        st.write(f"**Model loaded:** `{humanize_label(result.get('model_loaded'))}`")
+        st.write(f"**Placeholder:** `{humanize_label(result.get('is_placeholder'))}`")
+        st.write(f"**Final source:** `{humanize_label(result.get('final_source'))}`")
 
 
-st.set_page_config(page_title="Assessment Result | TriageAI", layout="wide")
+st.set_page_config(
+    page_title="Assessment Result | TriageAI",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 apply_theme()
+render_sidebar_navigation("Result")
 
-with st.sidebar:
-    st.markdown("### TriageAI / SympDirect")
-    st.caption("ESI care-routing workflow")
-    render_backend_status()
-
-render_top_header("Result Review")
+render_fixed_app_nav("Result", "Result Review")
 render_page_header(
     "ESI Decision-Support Output",
     "Backend-generated model result prepared for clinician review.",
@@ -132,15 +133,6 @@ if result.get("model_loaded") is False or result.get("is_placeholder") is True:
 
 render_main_result_card(result)
 
-review_col, dashboard_col = st.columns([1, 1], gap="medium")
-with review_col:
-    if st.button("Proceed to Clinician Review", type="primary", width="stretch"):
-        st.session_state["latest_prediction_response"] = result
-        st.switch_page("pages/04_Clinician_Review.py")
-with dashboard_col:
-    if st.button("Go to Dashboard", width="stretch"):
-        st.switch_page("pages/05_Dashboard.py")
-
 _html_card(
     "Recommendation",
     result.get("recommendation") or "No recommendation returned.",
@@ -166,3 +158,15 @@ st.markdown(
 render_clinician_summary_card(result.get("clinician_summary"))
 
 _render_model_details(result)
+
+new_col, review_col, dashboard_col = st.columns([1, 1, 1], gap="medium")
+with new_col:
+    if st.button("Back to New Assessment", width="stretch"):
+        st.switch_page("pages/02_New_Assessment.py")
+with review_col:
+    if st.button("Proceed to Clinician Review", type="primary", width="stretch"):
+        st.session_state["latest_prediction_response"] = result
+        st.switch_page("pages/04_Clinician_Review.py")
+with dashboard_col:
+    if st.button("Go to Dashboard", width="stretch"):
+        st.switch_page("pages/05_Dashboard.py")

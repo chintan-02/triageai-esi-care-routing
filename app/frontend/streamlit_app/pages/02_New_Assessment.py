@@ -8,24 +8,24 @@ if str(PROJECT_ROOT) not in sys.path:
 import streamlit as st
 
 from app.frontend.streamlit_app.components.intake_form import render_intake_form
-from app.frontend.streamlit_app.components.layout import render_backend_status
 from app.frontend.streamlit_app.services.api_client import submit_prediction
 from app.frontend.streamlit_app.ui_theme import (
     apply_theme,
+    render_fixed_app_nav,
     render_page_header,
-    render_top_header,
+    render_sidebar_navigation,
 )
 
 
-st.set_page_config(page_title="New Assessment | TriageAI", layout="wide")
+st.set_page_config(
+    page_title="New Assessment | TriageAI",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 apply_theme()
+render_sidebar_navigation("New Assessment")
 
-with st.sidebar:
-    st.markdown("### TriageAI / SympDirect")
-    st.caption("ESI care-routing workflow")
-    render_backend_status()
-
-render_top_header("Ready for Intake")
+render_fixed_app_nav("New Assessment", "Ready for Intake")
 render_page_header(
     "New Assessment",
     "Enter structured intake data to support ESI care-routing review.",
@@ -38,7 +38,7 @@ if submitted:
     if not payload["chief_complaint"] or len(payload["chief_complaint"]) < 3:
         st.error("Chief complaint must be at least 3 characters.")
     else:
-        with st.spinner("Running backend ESI assessment..."):
+        with st.spinner("Running ESI assessment..."):
             api_result = submit_prediction(payload)
 
         if api_result.get("ok"):

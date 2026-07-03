@@ -9,14 +9,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from app.frontend.streamlit_app.components.layout import render_backend_status
 from app.frontend.streamlit_app.services.api_client import submit_clinician_review
 from app.frontend.streamlit_app.ui_theme import (
     apply_theme,
+    humanize_label,
     render_disclaimer,
     render_empty_state,
+    render_fixed_app_nav,
+    render_kpi_grid,
     render_page_header,
-    render_top_header,
+    render_sidebar_navigation,
+    short_id,
 )
 
 
@@ -63,9 +66,7 @@ def _confidence_label(value: Any) -> str:
 
 
 def _source_label(value: Any) -> str:
-    if not value:
-        return "Unavailable"
-    return str(value).replace("_", " ").title()
+    return humanize_label(value)
 
 
 def _triggered_safety_rules(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -84,13 +85,26 @@ def _render_header(result: dict[str, Any]) -> None:
     st.markdown(
         '<div class="section-title">Review Snapshot</div>', unsafe_allow_html=True
     )
-    cols = st.columns(6)
-    cols[0].metric("Final ESI", final_esi)
-    cols[1].metric("Predicted ESI", predicted_esi)
-    cols[2].metric("Confidence", confidence)
-    cols[3].metric("Final source", source)
-    cols[4].metric("Safety rules", safety_label)
-    cols[5].metric("Model status", model_badge)
+    render_kpi_grid(
+        [
+            ("Final ESI", final_esi, None, "blue"),
+            ("Predicted ESI", predicted_esi, None, "neutral"),
+            ("Confidence", confidence, None, "green"),
+            ("Final source", source, None, "blue"),
+            (
+                "Safety rules",
+                safety_label,
+                None,
+                "red" if safety_label == "Triggered" else "green",
+            ),
+            (
+                "Model status",
+                model_badge,
+                None,
+                "green" if model_badge == "Real model" else "amber",
+            ),
+        ]
+    )
 
 
 def _render_intake_context(intake: dict[str, Any], result: dict[str, Any]) -> None:
@@ -191,8 +205,8 @@ def _render_success_summary(response: dict[str, Any]) -> None:
     decision = _source_label(response.get("clinician_decision"))
     final_esi = _display_value(response.get("clinician_final_esi"))
     review_note = _display_value(response.get("review_note"))
-    assessment_id = _display_value(response.get("assessment_id"))
-    review_id = _display_value(response.get("review_id"))
+    assessment_id = short_id(response.get("assessment_id"))
+    review_id = short_id(response.get("review_id"))
 
     st.success("Clinician decision saved and audit trail updated.", icon="✅")
     st.markdown(
@@ -202,7 +216,7 @@ def _render_success_summary(response: dict[str, Any]) -> None:
           <div class="metric-row">
             <div class="mini-metric"><div class="metric-label">Decision</div><div class="metric-value">{escape(decision)}</div></div>
             <div class="mini-metric"><div class="metric-label">Clinician Final ESI</div><div class="metric-value">{escape(final_esi)}</div></div>
-            <div class="mini-metric"><div class="metric-label">Status</div><div class="metric-value">{escape(_display_value(response.get("status")))}</div></div>
+            <div class="mini-metric"><div class="metric-label">Status</div><div class="metric-value">{escape(humanize_label(response.get("status")))}</div></div>
           </div>
           <div style="margin-top:.9rem;color:#1e3a52;line-height:1.6;">
             <strong>Assessment:</strong> {escape(assessment_id)}<br>
@@ -215,15 +229,15 @@ def _render_success_summary(response: dict[str, Any]) -> None:
     )
 
 
-st.set_page_config(page_title="Clinician Review | TriageAI", layout="wide")
+st.set_page_config(
+    page_title="Clinician Review | TriageAI",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 apply_theme()
+render_sidebar_navigation("Clinician Review")
 
-with st.sidebar:
-    st.markdown("### TriageAI / SympDirect")
-    st.caption("ESI care-routing workflow")
-    render_backend_status()
-
-render_top_header("Clinician Review")
+render_fixed_app_nav("Clinician Review", "Review Active")
 render_page_header(
     "Confirm or Override Final ESI",
     "Structured model output, clinician judgment, and audit trail in one workflow.",
@@ -343,7 +357,20 @@ with st.form("clinician_review_form"):
     )
 
     render_disclaimer(DISCLAIMER)
-    submitted = st.form_submit_button("Save Clinician Review", type="primary")
+    nav_left, nav_center, nav_right = st.columns([1, 1, 1], gap="medium")
+    with nav_left:
+        back_to_result = st.form_submit_button("Back to Result", width="stretch")
+    with nav_center:
+        submitted = st.form_submit_button(
+            "Save Clinician Review", type="primary", width="stretch"
+        )
+    with nav_right:
+        go_dashboard = st.form_submit_button("Go to Dashboard", width="stretch")
+
+if back_to_result:
+    st.switch_page("pages/03_Result.py")
+if go_dashboard:
+    st.switch_page("pages/05_Dashboard.py")
 
 if submitted:
     st.session_state["clinician_id"] = clinician_id.strip() or "clinician-reviewer"
@@ -376,11 +403,3 @@ if submitted:
         details = api_result.get("data")
         if details:
             st.json(details)
-
-nav_left, nav_right = st.columns([1, 1], gap="medium")
-with nav_left:
-    if st.button("Back to Result", width="stretch"):
-        st.switch_page("pages/03_Result.py")
-with nav_right:
-    if st.button("Go to Dashboard", width="stretch"):
-        st.switch_page("pages/05_Dashboard.py")

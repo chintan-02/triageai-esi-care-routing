@@ -9,7 +9,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from app.frontend.streamlit_app.components.layout import render_backend_status
 from app.frontend.streamlit_app.components.probability_chart import (
     render_probability_section,
 )
@@ -20,10 +19,15 @@ from app.frontend.streamlit_app.services.api_client import (
 )
 from app.frontend.streamlit_app.ui_theme import (
     apply_theme,
+    format_datetime_for_display,
+    humanize_label,
     render_disclaimer,
     render_empty_state,
+    render_fixed_app_nav,
+    render_kpi_grid,
     render_page_header,
-    render_top_header,
+    render_sidebar_navigation,
+    short_id,
 )
 
 
@@ -58,9 +62,7 @@ def _confidence_label(value: Any) -> str:
 
 
 def _label(value: Any) -> str:
-    if not value:
-        return "Pending"
-    return str(value).replace("_", " ").title()
+    return humanize_label(value, default="Pending")
 
 
 def _format_bp(detail: dict[str, Any]) -> str:
@@ -115,12 +117,25 @@ def _render_snapshot(detail: dict[str, Any]) -> None:
         '<div class="section-title">Patient / Intake Snapshot</div>',
         unsafe_allow_html=True,
     )
-    cols = st.columns(5)
-    cols[0].metric("Age", _display_value(intake.get("patient_age")))
-    cols[1].metric("Gender/Sex", _display_value(intake.get("sex")))
-    cols[2].metric("Status", _label(detail.get("status")))
-    cols[3].metric("Created", _display_value(detail.get("created_at")))
-    cols[4].metric("Assessment", _display_value(detail.get("assessment_id"))[:8])
+    render_kpi_grid(
+        [
+            ("Age", _display_value(intake.get("patient_age")), None, "neutral"),
+            ("Gender/Sex", _display_value(intake.get("sex")), None, "neutral"),
+            ("Status", _label(detail.get("status")), None, "amber"),
+            (
+                "Created",
+                format_datetime_for_display(detail.get("created_at")),
+                None,
+                "blue",
+            ),
+            (
+                "Assessment",
+                short_id(detail.get("assessment_id")),
+                None,
+                "blue",
+            ),
+        ]
+    )
 
     vitals = [
         ("Pain", detail.get("pain_score")),
@@ -193,12 +208,35 @@ def _render_prediction(detail: dict[str, Any]) -> None:
         st.info("No model prediction is stored for this assessment yet.")
         return
 
-    cols = st.columns(5)
-    cols[0].metric("Predicted ESI", _display_value(prediction.get("predicted_esi")))
-    cols[1].metric("Model final ESI", _display_value(prediction.get("final_esi")))
-    cols[2].metric("Confidence", _confidence_label(prediction.get("confidence_score")))
-    cols[3].metric("Final source", _label(prediction.get("final_source")))
-    cols[4].metric("Model loaded", _display_value(prediction.get("model_loaded")))
+    render_kpi_grid(
+        [
+            (
+                "Predicted ESI",
+                _display_value(prediction.get("predicted_esi")),
+                None,
+                "blue",
+            ),
+            (
+                "Model final ESI",
+                _display_value(prediction.get("final_esi")),
+                None,
+                "blue",
+            ),
+            (
+                "Confidence",
+                _confidence_label(prediction.get("confidence_score")),
+                None,
+                "green",
+            ),
+            ("Final source", _label(prediction.get("final_source")), None, "blue"),
+            (
+                "Model loaded",
+                _display_value(prediction.get("model_loaded")),
+                None,
+                "green" if prediction.get("model_loaded") else "amber",
+            ),
+        ]
+    )
 
     left, right = st.columns([1, 1], gap="large")
     with left:
@@ -242,14 +280,25 @@ def _render_review(detail: dict[str, Any]) -> None:
         st.warning("This assessment is pending clinician review.", icon="⚠️")
         return
 
-    cols = st.columns(5)
-    cols[0].metric("Reviewed", _display_value(review.get("reviewed")))
-    cols[1].metric("Decision", _label(review.get("clinician_decision")))
-    cols[2].metric(
-        "Clinician final ESI", _display_value(review.get("clinician_final_esi"))
+    render_kpi_grid(
+        [
+            ("Reviewed", _display_value(review.get("reviewed")), None, "green"),
+            ("Decision", _label(review.get("clinician_decision")), None, "amber"),
+            (
+                "Clinician final ESI",
+                _display_value(review.get("clinician_final_esi")),
+                None,
+                "blue",
+            ),
+            ("Review ID", short_id(review.get("review_id")), None, "blue"),
+            (
+                "Reviewed at",
+                format_datetime_for_display(review.get("created_at")),
+                None,
+                "green",
+            ),
+        ]
     )
-    cols[3].metric("Review ID", _display_value(review.get("review_id"))[:8])
-    cols[4].metric("Reviewed at", _display_value(review.get("created_at")))
 
     model_final = prediction.get("final_esi")
     clinician_final = review.get("clinician_final_esi")
@@ -277,7 +326,7 @@ def _render_audit(detail: dict[str, Any]) -> None:
         details = event.get("details")
         rows.append(
             {
-                "Timestamp": _display_value(event.get("created_at")),
+                "Timestamp": format_datetime_for_display(event.get("created_at")),
                 "Action": _label(event.get("action")),
                 "Actor": _display_value(event.get("actor_id")),
                 "Details": _display_value(details),
@@ -286,45 +335,41 @@ def _render_audit(detail: dict[str, Any]) -> None:
     st.dataframe(rows, width="stretch", hide_index=True)
 
 
-def _render_report_actions(assessment_id: str) -> None:
-    st.markdown('<div class="section-title">PDF Report</div>', unsafe_allow_html=True)
-    st.caption(
-        "Generate a decision-support summary from persisted intake, model output, "
-        "clinician review, and audit trail data."
-    )
-
+def _generate_report_for_assessment(assessment_id: str) -> None:
     report_key = f"generated_report_{assessment_id}"
-    if st.button("Generate PDF Report", type="primary", width="stretch"):
-        with st.spinner("Generating PDF report..."):
-            report_result = generate_report(assessment_id)
+    with st.spinner("Generating PDF report..."):
+        report_result = generate_report(assessment_id)
 
-        if not report_result.get("ok"):
-            st.error(report_result.get("message") or "Report generation failed.")
-            if report_result.get("error_type") == "connection":
-                st.code(report_result.get("start_command", ""), language="bash")
-            details = report_result.get("data")
-            if details:
-                st.json(details)
-            st.session_state.pop(report_key, None)
-            return
+    if not report_result.get("ok"):
+        st.error(report_result.get("message") or "Report generation failed.")
+        if report_result.get("error_type") == "connection":
+            st.code(report_result.get("start_command", ""), language="bash")
+        details = report_result.get("data")
+        if details:
+            st.json(details)
+        st.session_state.pop(report_key, None)
+        return
 
-        report_data = report_result["data"]
-        stored_report = {
-            "metadata": report_data,
-            "content": None,
-            "download_error": None,
-        }
-        report_id = report_data.get("report_id")
-        if report_id:
-            download_result = download_report(report_id)
-            if download_result.get("ok"):
-                stored_report["content"] = download_result["data"]["content"]
-            else:
-                stored_report["download_error"] = (
-                    download_result.get("message") or "Report download failed."
-                )
-        st.session_state[report_key] = stored_report
+    report_data = report_result["data"]
+    stored_report = {
+        "metadata": report_data,
+        "content": None,
+        "download_error": None,
+    }
+    report_id = report_data.get("report_id")
+    if report_id:
+        download_result = download_report(report_id)
+        if download_result.get("ok"):
+            stored_report["content"] = download_result["data"]["content"]
+        else:
+            stored_report["download_error"] = (
+                download_result.get("message") or "Report download failed."
+            )
+    st.session_state[report_key] = stored_report
 
+
+def _render_report_state(assessment_id: str) -> None:
+    report_key = f"generated_report_{assessment_id}"
     stored_report = st.session_state.get(report_key)
     if not stored_report:
         return
@@ -348,15 +393,15 @@ def _render_report_actions(assessment_id: str) -> None:
             st.info(f"Generated report saved at: {file_path}")
 
 
-st.set_page_config(page_title="Assessment Detail | TriageAI", layout="wide")
+st.set_page_config(
+    page_title="Assessment Detail | TriageAI",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 apply_theme()
+render_sidebar_navigation("Assessment Detail")
 
-with st.sidebar:
-    st.markdown("### TriageAI / SympDirect")
-    st.caption("ESI care-routing workflow")
-    render_backend_status()
-
-render_top_header("Assessment Detail")
+render_fixed_app_nav("Assessment Detail", "Audit View")
 render_page_header(
     "Persisted Assessment Review",
     "Model output, clinician review, and audit context from the database.",
@@ -402,21 +447,35 @@ _render_snapshot(detail)
 _render_prediction(detail)
 _render_review(detail)
 _render_audit(detail)
-_render_report_actions(detail.get("assessment_id") or assessment_id.strip())
+
+report_assessment_id = detail.get("assessment_id") or assessment_id.strip()
+st.markdown('<div class="section-title">PDF Report</div>', unsafe_allow_html=True)
+st.caption(
+    "Generate a decision-support summary from persisted intake, model output, "
+    "clinician review, and audit trail data."
+)
+
+if st.button("Generate PDF Report", type="primary", width="stretch"):
+    _generate_report_for_assessment(report_assessment_id)
+_render_report_state(report_assessment_id)
 
 nav_cols = st.columns([1, 1, 1], gap="medium")
+latest_prediction = _prediction_for_session(detail)
 with nav_cols[0]:
     if st.button("Back to Dashboard", width="stretch"):
         st.switch_page("pages/05_Dashboard.py")
 with nav_cols[1]:
-    latest_prediction = _prediction_for_session(detail)
-    if detail.get("status") != "review_completed" and latest_prediction:
-        if st.button("Go to Clinician Review", type="primary", width="stretch"):
-            st.session_state["latest_prediction_response"] = latest_prediction
-            st.session_state["latest_intake_payload"] = detail.get("intake") or {}
-            st.switch_page("pages/04_Clinician_Review.py")
+    review_available = detail.get("status") != "review_completed" and latest_prediction
+    if st.button(
+        "Go to Clinician Review",
+        width="stretch",
+        disabled=not review_available,
+    ):
+        st.session_state["latest_prediction_response"] = latest_prediction
+        st.session_state["latest_intake_payload"] = detail.get("intake") or {}
+        st.switch_page("pages/04_Clinician_Review.py")
 with nav_cols[2]:
-    latest_result = st.session_state.get("latest_prediction_response")
-    if latest_result:
-        if st.button("Go to Result", width="stretch"):
-            st.switch_page("pages/03_Result.py")
+    if st.button("Go to Result", width="stretch", disabled=not latest_prediction):
+        st.session_state["latest_prediction_response"] = latest_prediction
+        st.session_state["latest_intake_payload"] = detail.get("intake") or {}
+        st.switch_page("pages/03_Result.py")
