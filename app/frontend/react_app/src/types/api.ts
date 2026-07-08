@@ -214,10 +214,14 @@ export interface ClinicianReviewResponse {
 export interface RecentAssessmentItem {
   assessment_id: string;
   patient_id: string;
+  patient_name?: string | null;
+  mrn?: string | null;
   patient_age?: number | null;
   sex?: string | null;
   chief_complaint: string;
   status: string;
+  review_status?: ReviewStatusNormalized | string | null;
+  review_status_normalized?: ReviewStatusNormalized | string | null;
   created_at: string;
   predicted_esi?: EsiLevel | null;
   model_final_esi?: EsiLevel | null;
@@ -226,6 +230,7 @@ export interface RecentAssessmentItem {
   clinician_decision?: string | null;
   final_source?: string | null;
   confidence_score?: number | null;
+  latency_ms?: number | null;
 }
 
 export interface DashboardSummaryResponse {

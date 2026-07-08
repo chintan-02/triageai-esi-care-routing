@@ -2,14 +2,32 @@ import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, 
 import type { AssessmentRecord } from '@/types/clinical';
 import { formatShortTime } from '@/lib/formatters';
 
-export function OperationalTrendChart({ records }: { records: AssessmentRecord[] }) {
-  const data = [...records]
-    .sort((a, b) => +new Date(a.prediction.createdAt) - +new Date(b.prediction.createdAt))
+export type OperationalTrendPoint = {
+  createdAt: string;
+  latencyMs?: number | null;
+  confidence?: number | null;
+};
+
+export function OperationalTrendChart({
+  records,
+  points
+}: {
+  records?: AssessmentRecord[];
+  points?: OperationalTrendPoint[];
+}) {
+  const source = points ?? records?.map((record) => ({
+    createdAt: record.prediction.createdAt,
+    latencyMs: record.prediction.latencyMs,
+    confidence: record.prediction.confidence
+  })) ?? [];
+
+  const data = [...source]
+    .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
     .slice(-12)
-    .map((record) => ({
-      label: formatShortTime(record.prediction.createdAt),
-      latency: record.prediction.latencyMs,
-      confidence: Math.round(record.prediction.confidence * 100)
+    .map((point) => ({
+      label: formatShortTime(point.createdAt),
+      latency: typeof point.latencyMs === 'number' ? point.latencyMs : null,
+      confidence: typeof point.confidence === 'number' ? Math.round(point.confidence * 100) : null
     }));
 
   if (data.length < 2) {
@@ -25,7 +43,10 @@ export function OperationalTrendChart({ records }: { records: AssessmentRecord[]
         <YAxis yAxisId="confidence" orientation="right" domain={[0, 100]} tick={{ fontSize: 11, fill: '#5B6B85' }} axisLine={false} tickLine={false} width={34} />
         <Tooltip
           contentStyle={{ borderRadius: 12, border: '1px solid #E2E8F0', fontSize: 12 }}
-          formatter={(value, name) => (name === 'latency' ? [`${Number(value)} ms`, 'Latency'] : [`${Number(value)}%`, 'Confidence'])}
+          formatter={(value, name) => {
+            if (name === 'latency') return [value === null ? 'N/A' : `${Number(value)} ms`, 'Latency'];
+            return [value === null ? 'N/A' : `${Number(value)}%`, 'Confidence'];
+          }}
         />
         <Bar yAxisId="latency" dataKey="latency" fill="#CBD5E1" radius={[6, 6, 0, 0]} barSize={18} />
         <Line yAxisId="confidence" type="monotone" dataKey="confidence" stroke="#0D9488" strokeWidth={2.5} dot={{ r: 3, fill: '#0D9488' }} />

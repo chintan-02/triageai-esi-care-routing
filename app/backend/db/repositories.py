@@ -243,6 +243,30 @@ def get_latest_report_for_assessment(db: Session, assessment_id: str) -> Report 
     return reports[0] if reports else None
 
 
+def _patient_name(assessment: Assessment) -> str:
+    name = getattr(assessment.patient, "name", None)
+    return name if isinstance(name, str) and name.strip() else "Unknown patient"
+
+
+def _patient_mrn(assessment: Assessment) -> str:
+    mrn = getattr(assessment.patient, "mrn", None)
+    return mrn if isinstance(mrn, str) and mrn.strip() else "N/A"
+
+
+def _review_status_from_assessment(
+    assessment: Assessment,
+    latest_review: ClinicianReview | None,
+) -> str:
+    if latest_review is not None:
+        if latest_review.action == "override":
+            return "overridden"
+        if latest_review.action == "accept":
+            return "accepted"
+    if assessment.status == "review_completed":
+        return "accepted"
+    return "pending"
+
+
 def get_dashboard_summary(db: Session) -> dict[str, Any]:
     total_assessments = db.scalar(select(func.count()).select_from(Assessment)) or 0
     pending_reviews = (
@@ -325,10 +349,14 @@ def get_dashboard_summary(db: Session) -> dict[str, Any]:
             {
                 "assessment_id": assessment.id,
                 "patient_id": assessment.patient_id,
+                "patient_name": _patient_name(assessment),
+                "mrn": _patient_mrn(assessment),
                 "patient_age": assessment.patient.age,
                 "sex": assessment.patient.sex,
                 "chief_complaint": assessment.chief_complaint,
                 "status": assessment.status,
+                "review_status": _review_status_from_assessment(assessment, latest_review),
+                "review_status_normalized": _review_status_from_assessment(assessment, latest_review),
                 "created_at": assessment.created_at,
                 "predicted_esi": latest_prediction.predicted_esi if latest_prediction else None,
                 "model_final_esi": latest_prediction.final_esi if latest_prediction else None,

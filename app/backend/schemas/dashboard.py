@@ -8,10 +8,14 @@ from pydantic import BaseModel
 class RecentAssessmentItem(BaseModel):
     assessment_id: str
     patient_id: str
+    patient_name: str | None = None
+    mrn: str | None = None
     patient_age: int | None = None
     sex: str | None = None
     chief_complaint: str
     status: str
+    review_status: str | None = None
+    review_status_normalized: str | None = None
     created_at: datetime
     predicted_esi: int | None = None
     model_final_esi: int | None = None
