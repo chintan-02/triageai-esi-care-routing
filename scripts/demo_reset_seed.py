@@ -13,6 +13,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 from urllib.parse import unquote
 
 from sqlalchemy.engine import make_url
@@ -36,6 +37,7 @@ from app.backend.db.models import (
 from app.backend.db.session import SessionLocal
 from app.backend.schemas.clinician_review import ClinicianReviewRequest
 from app.backend.schemas.intake import PatientIntakeRequest
+from app.backend.api.routes.reports import get_or_generate_assessment_report_pdf
 from app.backend.services.audit_service import build_audit_details
 from app.backend.services.prediction_service import predict_esi_for_intake
 
@@ -93,8 +95,10 @@ def reset_demo_data(db: Session) -> None:
 def demo_cases() -> list[DemoCase]:
     return [
         DemoCase(
-            name="Case A - Typical ESI 3 accepted",
+            name="Demo Patient - Chest pain - accepted",
             intake=PatientIntakeRequest(
+                patient_name="Demo Patient",
+                mrn="MRN-DEMO-1001",
                 patient_age=52,
                 sex="male",
                 chief_complaint="Chest pain",
@@ -109,87 +113,118 @@ def demo_cases() -> list[DemoCase]:
                 consciousness_level="alert",
                 pregnancy=False,
                 arrival_mode="Walk-in",
-                additional_context="Stable appearance, no syncope, no altered mental status.",
+                additional_context=(
+                    "Substernal chest pain without syncope. Stable appearance; "
+                    "requires structured ESI care routing and clinician review."
+                ),
             ),
             review_action="accept",
-            review_notes="Accepted model/safety recommendation for typical ESI 3 demo case.",
+            review_notes="Accepted final routing decision after clinician review.",
         ),
         DemoCase(
-            name="Case B - Safety-rule escalation accepted",
+            name="Rahul Patel - Low-acuity symptom - accepted",
             intake=PatientIntakeRequest(
-                patient_age=56,
+                patient_name="Rahul Patel",
+                mrn="MRN-DEMO-1002",
+                patient_age=34,
                 sex="male",
-                chief_complaint="Chest discomfort",
-                symptom_duration="1 hour",
-                pain_score=5,
-                temperature_c=36.8,
-                heart_rate=115,
-                respiratory_rate=22,
-                systolic_bp=135,
-                diastolic_bp=85,
-                oxygen_saturation=87.0,
-                consciousness_level="alert",
-                pregnancy=False,
-                arrival_mode="Walk-in",
-                additional_context="Reports shortness of breath with low oxygen saturation.",
-            ),
-            review_action="accept",
-            review_notes="Accepted safety-rule escalation due to oxygen saturation below 92%.",
-        ),
-        DemoCase(
-            name="Case C - Clinician override",
-            intake=PatientIntakeRequest(
-                patient_age=60,
-                sex="female",
-                chief_complaint="Chest pain",
-                symptom_duration="30 minutes",
-                pain_score=6,
-                temperature_c=36.9,
-                heart_rate=112,
-                respiratory_rate=22,
-                systolic_bp=135,
-                diastolic_bp=85,
-                oxygen_saturation=96.0,
-                consciousness_level="alert",
-                pregnancy=False,
-                arrival_mode="Walk-in",
-                additional_context="No shortness of breath documented at intake.",
-            ),
-            review_action="override",
-            override_final_esi=2,
-            override_reason="Additional clinical context indicates higher-risk presentation.",
-            review_notes="Escalated for high-priority clinician review.",
-        ),
-        DemoCase(
-            name="Case D - Lower-acuity style case",
-            intake=PatientIntakeRequest(
-                patient_age=28,
-                sex="female",
-                chief_complaint="Mild itchy rash",
+                chief_complaint="Mild sore throat",
                 symptom_duration="2 days",
                 pain_score=1,
-                temperature_c=36.7,
-                heart_rate=78,
-                respiratory_rate=16,
+                temperature_c=36.9,
+                heart_rate=74,
+                respiratory_rate=15,
                 systolic_bp=118,
-                diastolic_bp=76,
+                diastolic_bp=74,
                 oxygen_saturation=99.0,
                 consciousness_level="alert",
                 pregnancy=False,
                 arrival_mode="Walk-in",
-                additional_context="No fever, no swelling, no breathing symptoms.",
+                additional_context="Mild upper respiratory symptoms; no dyspnea, chest pain, or abnormal vital signs.",
             ),
             review_action="accept",
-            review_notes="Accepted lower-acuity style demo case after clinician review.",
+            review_notes="Accepted lower-acuity final routing decision after clinician review.",
         ),
         DemoCase(
-            name="Case E - Pending review",
+            name="Jamie Rivera - Abdominal pain - pending review",
             intake=PatientIntakeRequest(
-                patient_age=35,
+                patient_name="Jamie Rivera",
+                mrn="MRN-DEMO-1003",
+                patient_age=41,
+                sex="other",
+                chief_complaint="Abdominal pain",
+                symptom_duration="8 hours",
+                pain_score=6,
+                temperature_c=37.4,
+                heart_rate=96,
+                respiratory_rate=18,
+                systolic_bp=124,
+                diastolic_bp=80,
+                oxygen_saturation=98.0,
+                consciousness_level="alert",
+                pregnancy=False,
+                arrival_mode="Walk-in",
+                additional_context="Cramping abdominal pain with nausea; awaiting clinician review.",
+            ),
+            review_action=None,
+        ),
+        DemoCase(
+            name="Maya Chen - Fever - pending review",
+            intake=PatientIntakeRequest(
+                patient_name="Maya Chen",
+                mrn="MRN-DEMO-1004",
+                patient_age=7,
+                sex="female",
+                chief_complaint="Fever",
+                symptom_duration="1 day",
+                pain_score=2,
+                temperature_c=38.4,
+                heart_rate=108,
+                respiratory_rate=20,
+                systolic_bp=102,
+                diastolic_bp=66,
+                oxygen_saturation=98.0,
+                consciousness_level="alert",
+                pregnancy=False,
+                arrival_mode="Referral",
+                additional_context="Fever with reduced appetite; alert and interactive during intake.",
+            ),
+            review_action=None,
+        ),
+        DemoCase(
+            name="Omar Khan - Shortness of breath safety escalation - accepted",
+            intake=PatientIntakeRequest(
+                patient_name="Omar Khan",
+                mrn="MRN-DEMO-1005",
+                patient_age=56,
                 sex="male",
-                chief_complaint="Ankle pain",
-                symptom_duration="4 hours",
-                pain_score=4,
+                chief_complaint="Chest discomfort with shortness of breath",
+                symptom_duration="1 hour",
+                pain_score=5,
+                temperature_c=36.8,
+                heart_rate=116,
+                respiratory_rate=24,
+                systolic_bp=136,
+                diastolic_bp=84,
+                oxygen_saturation=88.0,
+                consciousness_level="alert",
+                pregnancy=False,
+                arrival_mode="Ambulance",
+                additional_context="Chest discomfort with dyspnea and low oxygen saturation; safety escalation expected.",
+            ),
+            review_action="accept",
+            review_notes="Accepted safety-rule escalation for urgent clinician review.",
+        ),
+        DemoCase(
+            name="Sofia Martinez - Minor injury - accepted",
+            intake=PatientIntakeRequest(
+                patient_name="Sofia Martinez",
+                mrn="MRN-DEMO-1006",
+                patient_age=29,
+                sex="female",
+                chief_complaint="Minor wrist injury",
+                symptom_duration="3 hours",
+                pain_score=3,
                 temperature_c=36.8,
                 heart_rate=82,
                 respiratory_rate=16,
@@ -199,9 +234,10 @@ def demo_cases() -> list[DemoCase]:
                 consciousness_level="alert",
                 pregnancy=False,
                 arrival_mode="Walk-in",
-                additional_context="Twisted ankle while walking; no deformity reported.",
+                additional_context="Wrist pain after a fall; no deformity, normal sensation, and stable vital signs.",
             ),
-            review_action=None,
+            review_action="accept",
+            review_notes="Accepted final routing decision for minor injury demo case.",
         ),
     ]
 
@@ -239,20 +275,31 @@ def seed_demo_data(db: Session) -> list[dict[str, object]]:
     summaries = []
     for case in demo_cases():
         assessment = repositories.create_assessment(db, case.intake)
+        started_at = perf_counter()
         prediction = predict_esi_for_intake(case.intake)
+        prediction.latency_ms = max(0, round((perf_counter() - started_at) * 1000))
         prediction.assessment_id = assessment.id
         repositories.create_prediction(db, assessment.id, prediction)
         decision = _save_review(db, assessment.id, case, prediction.final_esi)
+        get_or_generate_assessment_report_pdf(assessment.id, db)
         db.refresh(assessment)
+        report_record = repositories.get_latest_generated_report_for_assessment(
+            db,
+            assessment.id,
+        )
         summaries.append(
             {
                 "case": case.name,
+                "patient_name": case.intake.patient_name,
+                "mrn": case.intake.mrn,
                 "assessment_id": assessment.id,
                 "chief_complaint": assessment.chief_complaint,
                 "predicted_esi": prediction.predicted_esi,
                 "final_esi": prediction.final_esi,
+                "latency_ms": prediction.latency_ms,
                 "clinician_decision": decision or "pending",
                 "status": assessment.status,
+                "report_id": report_record.id if report_record else None,
                 "safety_rules_triggered": [
                     rule.rule_id for rule in prediction.safety_rules_triggered if rule.triggered
                 ],
@@ -266,10 +313,11 @@ def print_seed_summary(summaries: list[dict[str, object]]) -> None:
     for summary in summaries:
         safety = summary["safety_rules_triggered"] or []
         print(
-            "- {case}: assessment_id={assessment_id}, chief_complaint={chief_complaint}, "
+            "- {case}: patient={patient_name}, mrn={mrn}, assessment_id={assessment_id}, "
+            "chief_complaint={chief_complaint}, "
             "predicted_esi={predicted_esi}, final_esi={final_esi}, "
-            "clinician_decision={clinician_decision}, status={status}, "
-            "safety_rules_triggered={safety}".format(
+            "latency_ms={latency_ms}, clinician_decision={clinician_decision}, "
+            "status={status}, report_id={report_id}, safety_rules_triggered={safety}".format(
                 **summary,
                 safety=", ".join(safety) if safety else "none",
             )

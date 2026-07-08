@@ -56,3 +56,13 @@ Workflow:
 - The final model registry path is `model_registry/esi_345_lightgbm_v2`.
 - React uses `VITE_API_BASE_URL=http://localhost:8001` for local FastAPI.
 - Generated files such as `node_modules`, `dist`, `*.tsbuildinfo`, local SQLite databases, and generated PDFs should not be tracked.
+
+## Reset Local Demo Data
+
+For screenshot-ready local data, reset and seed the SQLite demo database:
+
+```bash
+python scripts/reset_demo_data.py
+```
+
+This command is local SQLite only. It backs up the existing database, clears demo workflow tables, seeds named demo patients with MRNs, runs predictions through the backend model path, saves clinician review/audit records, and prepares backend PDF report records. Do not use it against production databases.
