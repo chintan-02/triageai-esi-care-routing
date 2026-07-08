@@ -1,10 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, ClipboardCheck, Loader2, UserRound } from 'lucide-react';
-import { useAssessmentsStore } from '@/context/AssessmentsContext';
+import { createPrediction } from '@/api/predictions';
 import { useToast } from '@/context/ToastContext';
 import { comorbidityOptions, riskFlagOptions } from '@/data/mockData';
-import type { IntakePayload, PatientProfile, Vitals } from '@/types/clinical';
+import type { PatientProfile, Vitals } from '@/types/clinical';
+import type { PatientIntakePayload } from '@/types/api';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { VitalsGrid } from '@/components/clinical/VitalsGrid';
@@ -55,9 +56,37 @@ function displayValue(value: string, fallback = 'Not entered') {
   return value.trim() || fallback;
 }
 
+function toNullableText(value: string) {
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function buildPredictionPayload(
+  patient: PatientProfile,
+  chiefComplaint: string,
+  symptomText: string,
+  duration: string,
+  vitals: Vitals
+): PatientIntakePayload {
+  return {
+    patient_age: patient.age,
+    sex: patient.sex === 'Unknown' ? null : patient.sex.toLowerCase(),
+    chief_complaint: chiefComplaint.trim(),
+    symptom_duration: toNullableText(duration),
+    pain_score: vitals.painScore,
+    temperature_c: vitals.temperatureC,
+    heart_rate: vitals.heartRate,
+    respiratory_rate: vitals.respiratoryRate,
+    systolic_bp: vitals.systolicBp,
+    diastolic_bp: vitals.diastolicBp,
+    oxygen_saturation: vitals.spo2,
+    arrival_mode: patient.arrivalMode,
+    additional_context: toNullableText(symptomText)
+  };
+}
+
 export function NewAssessmentPage() {
   const navigate = useNavigate();
-  const { createAssessment } = useAssessmentsStore();
   const { showToast } = useToast();
 
   const [patient, setPatient] = useState<PatientProfile>(() => createDefaultPatient());
@@ -68,6 +97,7 @@ export function NewAssessmentPage() {
   const [riskFlags, setRiskFlags] = useState<string[]>([]);
   const [comorbidities, setComorbidities] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
 
   const missingFields = useMemo(
@@ -128,17 +158,23 @@ export function NewAssessmentPage() {
   const handleRunDecisionSupport = async () => {
     if (missingFields.length || isSubmitting) return;
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
-      const payload: IntakePayload = { patient, chiefComplaint, symptomText, duration, vitals, riskFlags, comorbidities };
-      const record = await createAssessment(payload);
+      const payload = buildPredictionPayload(patient, chiefComplaint, symptomText, duration, vitals);
+      const prediction = await createPrediction(payload);
+      if (!prediction.assessment_id) {
+        throw new Error('Prediction completed, but the backend did not return an assessment ID.');
+      }
       showToast({
         tone: 'success',
         title: 'Assessment created',
-        description: `${record.id} routed to ESI ${record.prediction.finalEsi} in ${record.prediction.latencyMs} ms.`
+        description: `${prediction.assessment_id} routed to ESI ${prediction.final_esi ?? 'pending clinician review'}.`
       });
-      navigate(`/assessments/${record.id}`);
-    } catch {
-      showToast({ tone: 'error', title: 'Could not create assessment', description: 'Please try again or confirm the FastAPI adapter is available.' });
+      navigate(`/assessments/${prediction.assessment_id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Please try again or confirm the FastAPI backend is available.';
+      setSubmitError(message);
+      showToast({ tone: 'error', title: 'Could not run ESI decision support', description: message });
     } finally {
       setIsSubmitting(false);
     }
@@ -381,6 +417,11 @@ export function NewAssessmentPage() {
                     <Badge className="border-white/15 bg-white/10 text-white">Clinician review</Badge>
                   </div>
                 </div>
+                {submitError ? (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">
+                    {submitError}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

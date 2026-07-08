@@ -3,7 +3,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NewAssessmentPage } from './NewAssessmentPage';
 
-const createAssessment = vi.fn();
+const { createPrediction } = vi.hoisted(() => ({
+  createPrediction: vi.fn()
+}));
 const showToast = vi.fn();
 const mockNavigate = vi.fn();
 
@@ -15,8 +17,8 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('@/context/AssessmentsContext', () => ({
-  useAssessmentsStore: () => ({ createAssessment })
+vi.mock('@/api/predictions', () => ({
+  createPrediction
 }));
 
 vi.mock('@/context/ToastContext', () => ({
@@ -25,12 +27,12 @@ vi.mock('@/context/ToastContext', () => ({
 
 describe('NewAssessmentPage', () => {
   beforeEach(() => {
-    createAssessment.mockReset();
+    createPrediction.mockReset();
     showToast.mockReset();
     mockNavigate.mockReset();
-    createAssessment.mockResolvedValue({
-      id: 'AS-100',
-      prediction: { finalEsi: 3, latencyMs: 42 }
+    createPrediction.mockResolvedValue({
+      assessment_id: 'AS-100',
+      final_esi: 3
     });
   });
 
@@ -62,7 +64,7 @@ describe('NewAssessmentPage', () => {
 
     expect(screen.getByText(/safety gate preview/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /run esi decision support/i })).toBeInTheDocument();
-    expect(createAssessment).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
   });
 
   it('preserves intake state on review and only submits from the final CTA', async () => {
@@ -100,25 +102,24 @@ describe('NewAssessmentPage', () => {
     expect(screen.getAllByText('Chest pain').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Diabetes').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/ready for prediction/i).length).toBeGreaterThan(0);
-    expect(createAssessment).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
 
     const form = screen.getByRole('button', { name: /run esi decision support/i }).closest('form');
     expect(form).not.toBeNull();
     fireEvent.submit(form as HTMLFormElement);
-    expect(createAssessment).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /run esi decision support/i }));
 
     await waitFor(() => {
-      expect(createAssessment).toHaveBeenCalledWith(
+      expect(createPrediction).toHaveBeenCalledWith(
         expect.objectContaining({
-          patient: expect.objectContaining({ name: 'harsh' }),
-          chiefComplaint: 'pain',
-          symptomText: 'brief',
-          duration: '1',
-          vitals: expect.objectContaining({ heartRate: 110 }),
-          riskFlags: expect.arrayContaining(['Chest pain']),
-          comorbidities: expect.arrayContaining(['Diabetes'])
+          patient_age: 32,
+          sex: 'female',
+          chief_complaint: 'pain',
+          symptom_duration: '1',
+          heart_rate: 110,
+          additional_context: 'brief'
         })
       );
     });
@@ -126,10 +127,10 @@ describe('NewAssessmentPage', () => {
   });
 
   it('prevents duplicate decision-support runs while submission is pending', async () => {
-    let resolveAssessment: (value: { id: string; prediction: { finalEsi: number; latencyMs: number } }) => void = () => undefined;
-    createAssessment.mockReturnValueOnce(
+    let resolvePrediction: (value: { assessment_id: string; final_esi: number }) => void = () => undefined;
+    createPrediction.mockReturnValueOnce(
       new Promise((resolve) => {
-        resolveAssessment = resolve;
+        resolvePrediction = resolve;
       })
     );
 
@@ -154,9 +155,9 @@ describe('NewAssessmentPage', () => {
     fireEvent.click(runButton);
     fireEvent.click(runButton);
 
-    expect(createAssessment).toHaveBeenCalledTimes(1);
+    expect(createPrediction).toHaveBeenCalledTimes(1);
 
-    resolveAssessment({ id: 'AS-200', prediction: { finalEsi: 3, latencyMs: 55 } });
+    resolvePrediction({ assessment_id: 'AS-200', final_esi: 3 });
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/assessments/AS-200'));
   });
 });
