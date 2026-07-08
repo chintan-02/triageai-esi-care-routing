@@ -107,16 +107,6 @@ def get_or_generate_assessment_report_pdf(
     if assessment is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
 
-    existing_report = repositories.get_latest_report_for_assessment(db, assessment_id)
-    if existing_report is not None:
-        pdf_path = report_file_path(settings.REPORT_OUTPUT_DIR, existing_report.id)
-        if pdf_path.exists() and pdf_path.is_file():
-            return FileResponse(
-                path=pdf_path,
-                filename=report_file_name(existing_report.id),
-                media_type="application/pdf",
-            )
-
     report_record = repositories.create_report_record(
         db,
         ReportRequest(assessment_id=assessment_id, include_audit=True),
