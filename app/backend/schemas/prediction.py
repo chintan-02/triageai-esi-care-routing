@@ -22,6 +22,8 @@ class ESIPredictionResponse(BaseModel):
     assessment_id: str | None = None
     acuity_scale: Literal["ESI"] = "ESI"
     model_version: str | None = None
+    model_name: str | None = None
+    selected_calibration_method: str | None = None
     model_loaded: bool
     predicted_esi: int | None = Field(default=None, ge=1, le=5)
     final_esi: int | None = Field(default=None, ge=1, le=5)
@@ -34,3 +36,4 @@ class ESIPredictionResponse(BaseModel):
     clinician_summary: str
     is_placeholder: bool
     disclaimer: str
+    probability_note: str | None = None

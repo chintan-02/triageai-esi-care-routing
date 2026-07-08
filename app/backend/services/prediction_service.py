@@ -32,6 +32,8 @@ DECISION_SUPPORT_DISCLAIMER = (
     "is not a diagnosis or a substitute for clinician judgment."
 )
 
+RAW_PROBABILITY_NOTE = "Raw model probabilities are not calibrated probabilities."
+
 
 def validate_prediction_contract(
     intake: PatientIntakeRequest,
@@ -52,6 +54,7 @@ def validate_prediction_contract(
         clinician_summary=build_placeholder_clinician_summary(),
         is_placeholder=True,
         disclaimer=DECISION_SUPPORT_DISCLAIMER,
+        probability_note=RAW_PROBABILITY_NOTE,
     )
 
 
@@ -127,12 +130,27 @@ def _run_model_predict(model: Any, model_input: Any) -> Any:
     return model.predict(model_input)
 
 
+def _validate_model_input_alignment(model_input: Any, feature_list: list[str] | None) -> None:
+    if not feature_list:
+        return
+    input_columns = list(getattr(model_input, "columns", []))
+    if input_columns != feature_list:
+        missing = [feature for feature in feature_list if feature not in input_columns]
+        extra = [feature for feature in input_columns if feature not in feature_list]
+        raise ValueError(
+            "Model input feature alignment mismatch: "
+            f"expected {len(feature_list)} features, got {len(input_columns)}. "
+            f"Missing: {missing[:10]}. Extra: {extra[:10]}."
+        )
+
+
 def predict_esi_for_intake(intake: PatientIntakeRequest) -> ESIPredictionResponse:
     bundle = get_model_bundle()
     if not bundle.loaded:
         return validate_prediction_contract(intake)
 
     model_input = build_model_input(intake, bundle.feature_schema or {})
+    _validate_model_input_alignment(model_input, bundle.feature_list)
     raw_probabilities = _run_model_predict(bundle.model, model_input)
     probabilities = _probabilities_from_model_output(
         raw_probabilities,
@@ -149,6 +167,8 @@ def predict_esi_for_intake(intake: PatientIntakeRequest) -> ESIPredictionRespons
         request_id=new_id(),
         acuity_scale="ESI",
         model_version=bundle.model_version,
+        model_name=bundle.model_name,
+        selected_calibration_method=bundle.selected_calibration_method,
         model_loaded=True,
         predicted_esi=predicted_esi,
         final_esi=final_esi,
@@ -173,4 +193,5 @@ def predict_esi_for_intake(intake: PatientIntakeRequest) -> ESIPredictionRespons
         ),
         is_placeholder=False,
         disclaimer=DECISION_SUPPORT_DISCLAIMER,
+        probability_note=RAW_PROBABILITY_NOTE,
     )

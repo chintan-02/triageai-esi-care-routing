@@ -38,3 +38,9 @@ legacy/khushal_reference/notebooks/*
 # Legacy Khushal notebooks - keep locally only, avoid heavy old experiments in public repo
 legacy/khushal_reference/notebooks/*
 !legacy/khushal_reference/notebooks/.gitkeep
+
+*.joblib
+
+!model_registry/esi_345_lightgbm_v2/esi_345_lightgbm_v2_preprocessing_artifacts.joblib
+
+~$*.docx

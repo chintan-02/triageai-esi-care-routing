@@ -66,10 +66,13 @@ def test_feature_alignment_fills_missing_schema_columns() -> None:
 
 
 def test_generated_feature_schema_contains_expected_v2_features() -> None:
-    with Path("model_artifacts/feature_schema.json").open() as file:
-        feature_schema = json.load(file)
+    feature_list_path = Path(
+        "model_registry/esi_345_lightgbm_v2/esi_345_lightgbm_v2_feature_list.json"
+    )
+    with feature_list_path.open() as file:
+        features = json.load(file)
 
-    assert feature_schema["feature_count"] == 272
+    assert len(features) == 273
     for feature in [
         "age",
         "triage_vital_hr",
@@ -78,4 +81,4 @@ def test_generated_feature_schema_contains_expected_v2_features() -> None:
         "cc_chestpain",
         "cc_shortnessofbreath",
     ]:
-        assert feature in feature_schema["features"]
+        assert feature in features

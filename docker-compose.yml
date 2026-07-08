@@ -7,10 +7,14 @@ services:
       APP_ENV: demo
       DEMO_MODE: "true"
       DATABASE_URL: sqlite:////app/data/triageai_demo.sqlite
-      MODEL_PATH: model_artifacts/esi_345_lightgbm_v2_threshold.txt
-      THRESHOLDS_PATH: model_artifacts/thresholds.json
-      FEATURE_SCHEMA_PATH: model_artifacts/feature_schema.json
-      MODEL_METADATA_PATH: model_artifacts/model_metadata.json
+      MODEL_REGISTRY_DIR: model_registry/esi_345_lightgbm_v2
+      MODEL_DEPLOYMENT_CONFIG: model_registry/esi_345_lightgbm_v2/esi_345_deployment_config.json
+      MODEL_PATH: model_registry/esi_345_lightgbm_v2/esi_345_lightgbm_v2_model.txt
+      PREPROCESSOR_PATH: model_registry/esi_345_lightgbm_v2/esi_345_lightgbm_v2_preprocessing_artifacts.joblib
+      THRESHOLDS_PATH: model_registry/esi_345_lightgbm_v2/esi_345_lightgbm_v2_threshold_config.json
+      FEATURE_SCHEMA_PATH: model_registry/esi_345_lightgbm_v2/esi_345_lightgbm_v2_feature_list.json
+      MODEL_METADATA_PATH: model_registry/esi_345_lightgbm_v2/esi_345_deployment_config.json
+      LABEL_MAPPING_PATH: model_registry/esi_345_lightgbm_v2/esi_345_label_mapping.json
       REPORT_OUTPUT_DIR: /app/reports/generated
     ports:
       - "8001:8001"

@@ -26,7 +26,7 @@ def test_get_ready_status_parses_backend_response(monkeypatch) -> None:
             {
                 "status": "ready",
                 "model_loaded": True,
-                "model_version": "esi_345_lightgbm_v2_threshold",
+                "model_version": "lightgbm_v2_weight_threshold_esi345",
                 "database": "connected",
             },
         )
