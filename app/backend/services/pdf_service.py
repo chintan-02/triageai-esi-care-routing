@@ -590,7 +590,7 @@ def _add_patient_snapshot(
                     content_width,
                     [
                         ("Patient", _patient_summary(assessment)),
-                        ("MRN", "N/A"),
+                        ("MRN", _patient_mrn(assessment)),
                         ("Arrival Mode", assessment.arrival_mode),
                         ("Chief Complaint", assessment.chief_complaint),
                         ("Symptom Narrative", assessment.additional_context),
@@ -1025,9 +1025,17 @@ def _report_final_esi(
 
 
 def _patient_summary(assessment: Assessment) -> str:
-    age = _display(getattr(assessment.patient, "age", None))
-    sex = _display(getattr(assessment.patient, "sex", None))
-    return f"Unknown patient ({age}, {sex})"
+    patient = getattr(assessment, "patient", None)
+    name = getattr(patient, "name", None)
+    display_name = name.strip() if isinstance(name, str) and name.strip() else "Unknown patient"
+    age = _display(getattr(patient, "age", None))
+    sex = _display(getattr(patient, "sex", None))
+    return f"{display_name} ({age}, {sex})"
+
+
+def _patient_mrn(assessment: Assessment) -> str:
+    mrn = getattr(getattr(assessment, "patient", None), "mrn", None)
+    return mrn.strip() if isinstance(mrn, str) and mrn.strip() else "N/A"
 
 
 def _vital_cells(assessment: Assessment) -> list[tuple[str, str, str]]:

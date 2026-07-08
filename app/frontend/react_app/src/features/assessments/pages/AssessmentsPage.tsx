@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowUpRight, Plus, Search } from 'lucide-react';
-import { useAssessmentsStore } from '@/context/AssessmentsContext';
+import { listAssessments } from '@/api/assessments';
 import { useAuth } from '@/context/AuthContext';
 import { hasPermission } from '@/lib/permissions';
-import type { ReviewStatus } from '@/types/clinical';
+import type { AssessmentListItem } from '@/types/api';
+import type { EsiLevel, ReviewStatus } from '@/types/clinical';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
@@ -17,25 +18,109 @@ import { formatDateTime, formatPercent } from '@/lib/formatters';
 
 const statusFilters: Array<{ value: ReviewStatus | 'all'; label: string }> = [
   { value: 'all', label: 'All' },
-  { value: 'pending', label: 'Pending' },
+  { value: 'pending', label: 'Pending review' },
   { value: 'accepted', label: 'Accepted' },
   { value: 'overridden', label: 'Overridden' }
 ];
 
+type AssessmentRow = {
+  id: string;
+  patientName: string;
+  mrn: string;
+  age: number | null;
+  sex: string;
+  chiefComplaint: string;
+  modelVersion: string;
+  predictedEsi: EsiLevel | null;
+  finalEsi: EsiLevel | null;
+  confidence: number | null;
+  latencyMs: number | null;
+  reviewStatus: ReviewStatus;
+  createdAt: string | null;
+};
+
+function textOrFallback(value: string | null | undefined, fallback: string): string {
+  return value?.trim() || fallback;
+}
+
+function isEsiLevel(value: unknown): value is EsiLevel {
+  return typeof value === 'number' && [1, 2, 3, 4, 5].includes(value);
+}
+
+function normalizeReviewStatus(item: AssessmentListItem): ReviewStatus {
+  const rawStatus = item.review_status_normalized ?? item.review_status ?? item.status;
+  if (rawStatus === 'accepted' || rawStatus === 'overridden') return rawStatus;
+  return 'pending';
+}
+
+function mapAssessmentRow(item: AssessmentListItem): AssessmentRow {
+  return {
+    id: item.assessment_id,
+    patientName: textOrFallback(item.patient_name, 'Unknown patient'),
+    mrn: textOrFallback(item.mrn, 'N/A'),
+    age: typeof item.age === 'number' ? item.age : null,
+    sex: textOrFallback(item.sex, 'Unknown'),
+    chiefComplaint: textOrFallback(item.chief_complaint, 'Not documented'),
+    modelVersion: textOrFallback(item.model_version, 'N/A'),
+    predictedEsi: isEsiLevel(item.model_predicted_esi) ? item.model_predicted_esi : null,
+    finalEsi: isEsiLevel(item.final_esi) ? item.final_esi : null,
+    confidence: typeof item.confidence_score === 'number' ? item.confidence_score : null,
+    latencyMs: typeof item.latency_ms === 'number' ? item.latency_ms : null,
+    reviewStatus: normalizeReviewStatus(item),
+    createdAt: item.created_at ?? item.updated_at ?? null,
+  };
+}
+
+function EsiCell({ level, prefix }: { level: EsiLevel | null; prefix?: string }) {
+  if (!level) return <span className="text-xs font-semibold text-slate-500">N/A</span>;
+  return <EsiBadge level={level} prefix={prefix} />;
+}
+
+function formatAgeSexMrn(row: AssessmentRow): string {
+  const age = row.age === null ? 'Age N/A' : String(row.age);
+  return `${age} • ${row.sex} • ${row.mrn}`;
+}
+
+function shortAssessmentId(id: string): string {
+  return id.split('-')[0] || id.slice(0, 8);
+}
+
 export function AssessmentsPage() {
-  const { records, isLoading, error, refresh } = useAssessmentsStore();
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get('search') ?? '');
   const [statusFilter, setStatusFilter] = useState<ReviewStatus | 'all'>('all');
+  const [assessments, setAssessments] = useState<AssessmentListItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const canCreateAssessment = hasPermission(user?.role, 'assessment:create');
+
+  const refresh = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const loaded = await listAssessments();
+      setAssessments(loaded);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Backend request failed.';
+      setError(`Unable to load real backend assessments from GET /assessments. ${message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const records = useMemo(() => assessments.map(mapAssessmentRow), [assessments]);
 
   const filterCounts = useMemo(
     () => ({
       all: records.length,
-      pending: records.filter((record) => record.review.status === 'pending').length,
-      accepted: records.filter((record) => record.review.status === 'accepted').length,
-      overridden: records.filter((record) => record.review.status === 'overridden').length
+      pending: records.filter((record) => record.reviewStatus === 'pending').length,
+      accepted: records.filter((record) => record.reviewStatus === 'accepted').length,
+      overridden: records.filter((record) => record.reviewStatus === 'overridden').length
     }),
     [records]
   );
@@ -43,20 +128,20 @@ export function AssessmentsPage() {
   const filtered = useMemo(() => {
     const normalized = query.toLowerCase().trim();
     return records
-      .filter((record) => statusFilter === 'all' || record.review.status === statusFilter)
+      .filter((record) => statusFilter === 'all' || record.reviewStatus === statusFilter)
       .filter((record) => {
         if (!normalized) return true;
         return [
           record.id,
-          record.intake.patient.name,
-          record.intake.patient.mrn,
-          record.intake.chiefComplaint,
-          record.prediction.modelVersion,
-          `pred esi ${record.prediction.predictedEsi}`,
-          `predicted esi ${record.prediction.predictedEsi}`,
-          `final esi ${record.prediction.finalEsi}`,
-          `esi ${record.prediction.finalEsi}`,
-          record.review.status
+          record.patientName,
+          record.mrn,
+          record.chiefComplaint,
+          record.modelVersion,
+          `pred esi ${record.predictedEsi ?? 'n/a'}`,
+          `predicted esi ${record.predictedEsi ?? 'n/a'}`,
+          `final esi ${record.finalEsi ?? 'n/a'}`,
+          `esi ${record.finalEsi ?? 'n/a'}`,
+          record.reviewStatus
         ]
           .join(' ')
           .toLowerCase()
@@ -156,35 +241,39 @@ export function AssessmentsPage() {
                   <tr key={record.id} className="align-top transition hover:bg-slate-50/80">
                     <td className="px-5 py-4">
                       <Link to={`/assessments/${record.id}`} className="font-data font-bold text-clinical-blue hover:text-blue-800">
-                        {record.id}
+                        <span title={record.id}>{shortAssessmentId(record.id)}</span>
                       </Link>
-                      <p className="text-xs text-slate-500">{formatDateTime(record.prediction.createdAt)}</p>
+                      <p className="text-xs text-slate-500">{record.createdAt ? formatDateTime(record.createdAt) : 'N/A'}</p>
                     </td>
                     <td className="px-5 py-4">
-                      <p className="font-bold leading-5 text-slate-950">{record.intake.patient.name}</p>
+                      <p className="font-bold leading-5 text-slate-950">{record.patientName}</p>
                       <p className="font-data text-xs text-slate-500">
-                        {record.intake.patient.age} • {record.intake.patient.sex || 'Unknown'} • {record.intake.patient.mrn}
+                        {formatAgeSexMrn(record)}
                       </p>
                     </td>
                     <td className="px-5 py-4">
                       <p className="max-w-[260px] overflow-hidden text-ellipsis leading-5 text-slate-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                        {record.intake.chiefComplaint}
+                        {record.chiefComplaint}
                       </p>
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex flex-col items-start gap-1">
-                        <EsiBadge level={record.prediction.predictedEsi} prefix="Pred" />
+                        <EsiCell level={record.predictedEsi} prefix="Pred" />
                       </div>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">{formatPercent(record.prediction.confidence)}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">{formatPercent(record.confidence ?? undefined)}</p>
                     </td>
                     <td className="px-5 py-4">
-                      <EsiBadge level={record.prediction.finalEsi} />
+                      <EsiCell level={record.finalEsi} />
                     </td>
                     <td className="px-5 py-4">
-                      <LatencyBadge ms={record.prediction.latencyMs} size="sm" />
+                      {record.latencyMs === null ? (
+                        <span className="text-xs font-semibold text-slate-500">N/A</span>
+                      ) : (
+                        <LatencyBadge ms={record.latencyMs} size="sm" />
+                      )}
                     </td>
                     <td className="px-5 py-4">
-                      <ReviewStatusBadge status={record.review.status} />
+                      <ReviewStatusBadge status={record.reviewStatus} />
                     </td>
                     <td className="px-5 py-4 text-right">
                       <Link to={`/assessments/${record.id}`}>

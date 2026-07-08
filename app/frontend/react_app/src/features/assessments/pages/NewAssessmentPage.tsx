@@ -69,6 +69,8 @@ function buildPredictionPayload(
   vitals: Vitals
 ): PatientIntakePayload {
   return {
+    patient_name: toNullableText(patient.name),
+    mrn: toNullableText(patient.mrn),
     patient_age: patient.age,
     sex: patient.sex === 'Unknown' ? null : patient.sex.toLowerCase(),
     chief_complaint: chiefComplaint.trim(),

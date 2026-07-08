@@ -9,6 +9,7 @@ from app.backend.schemas.clinician_review import (
     ClinicianReviewResponse,
 )
 from app.backend.services.audit_service import build_audit_details
+from app.backend.services.text_formatting import clean_human_readable_text
 
 router = APIRouter(prefix="/clinician-review", tags=["clinician-review"])
 
@@ -57,13 +58,17 @@ def submit_clinician_review(
         ),
     )
 
+    review_note = clean_human_readable_text(
+        review_record.override_reason or review_record.notes
+    )
+
     return ClinicianReviewResponse(
         review_id=review_record.id,
         assessment_id=review.assessment_id,
         clinician_decision=review.action,
         clinician_final_esi=review_record.final_esi,
         final_esi=review_record.final_esi,
-        review_note=review_record.override_reason or review_record.notes,
+        review_note=review_note,
         status=status,
         review_status=review_status_normalized,
         review_status_normalized=review_status_normalized,

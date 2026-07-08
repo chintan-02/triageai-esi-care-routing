@@ -7,6 +7,12 @@ const tones: Record<ReviewStatus, string> = {
   overridden: 'border-blue-200 bg-blue-50 text-blue-800'
 };
 
+const labels: Record<ReviewStatus, string> = {
+  pending: 'Pending review',
+  accepted: 'Accepted',
+  overridden: 'Overridden'
+};
+
 export function ReviewStatusBadge({ status }: { status: ReviewStatus }) {
-  return <Badge className={tones[status]}>{status.replace('-', ' ')}</Badge>;
+  return <Badge className={tones[status]}>{labels[status]}</Badge>;
 }

@@ -101,6 +101,10 @@ function pendingNote(note: string) {
   return note.trim().toLowerCase().startsWith('awaiting clinician review');
 }
 
+function shortAssessmentId(id: string): string {
+  return id.split('-')[0] || id.slice(0, 8);
+}
+
 function isEsiLevel(value: unknown): value is EsiLevel {
   return typeof value === 'number' && [1, 2, 3, 4, 5].includes(value);
 }
@@ -147,14 +151,90 @@ function normalizeProbabilities(probabilities: Record<string, number> | undefine
   );
 }
 
-function detailsToText(details: unknown): string {
-  if (!details) return 'No additional details.';
-  if (typeof details === 'string') return details;
-  try {
-    return JSON.stringify(details);
-  } catch {
-    return 'Backend audit event details could not be serialized.';
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function auditPayload(details: unknown): Record<string, unknown> {
+  if (!isPlainRecord(details)) return {};
+  const payload = details.payload;
+  return isPlainRecord(payload) ? { ...details, ...payload } : details;
+}
+
+function readableAuditValue(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'string') return value.replace(/_/g, ' ');
+  return null;
+}
+
+function auditMetadataItem(
+  details: Record<string, unknown>,
+  keys: string[],
+  label: string,
+): { label: string; value: string } | null {
+  for (const key of keys) {
+    const value = readableAuditValue(details[key]);
+    if (value) return { label, value };
   }
+  return null;
+}
+
+function compactAuditMetadata(action: string, details: unknown): Array<{ label: string; value: string }> {
+  const payload = auditPayload(details);
+  const items: Array<{ label: string; value: string } | null> = [];
+
+  if (action === 'prediction_generated') {
+    items.push(
+      auditMetadataItem(payload, ['predicted_esi'], 'Predicted ESI'),
+      auditMetadataItem(payload, ['final_esi', 'model_final_esi'], 'Final ESI'),
+    );
+  }
+
+  if (action.startsWith('clinician_review_')) {
+    items.push(
+      auditMetadataItem(payload, ['clinician_final_esi', 'final_esi'], 'Final ESI'),
+      auditMetadataItem(payload, ['clinician_id', 'reviewer'], 'Reviewer'),
+      auditMetadataItem(payload, ['override_reason'], 'Override reason'),
+      auditMetadataItem(payload, ['review_note', 'notes'], 'Review note'),
+    );
+  }
+
+  return items.filter((item): item is { label: string; value: string } => Boolean(item));
+}
+
+function auditActionTitle(action: string): string {
+  switch (action) {
+    case 'assessment_created':
+      return 'Assessment created';
+    case 'prediction_generated':
+      return 'Prediction generated';
+    case 'clinician_review_accept':
+      return 'Clinician review accepted';
+    case 'clinician_review_override':
+      return 'Clinician review overridden';
+    case 'clinician_review_needs_review':
+      return 'Clinician marked needs review';
+    default:
+      return action.replace(/_/g, ' ');
+  }
+}
+
+function auditMessage(action: string, details: unknown, message?: string | null): string {
+  const payload = auditPayload(details);
+  if (action === 'assessment_created') return 'Assessment created and queued for clinician review.';
+  if (action === 'prediction_generated') {
+    const predicted = readableAuditValue(payload.predicted_esi);
+    const final = readableAuditValue(payload.final_esi ?? payload.model_final_esi);
+    if (predicted && final) return `Model prediction generated. Predicted ESI ${predicted}, final ESI ${final}.`;
+    return 'Model prediction generated.';
+  }
+  if (action === 'clinician_review_accept') return 'Clinician accepted final routing decision.';
+  if (action === 'clinician_review_override') return 'Clinician overrode final routing decision.';
+  if (action === 'clinician_review_needs_review') return 'Clinician marked assessment for additional review.';
+  if (message?.trim()) return message;
+  if (typeof details === 'string' && details.trim()) return details;
+  return 'Audit event recorded.';
 }
 
 function severityFromRule(rule: Record<string, unknown>, safetyEscalated: boolean): RiskSeverity {
@@ -186,8 +266,9 @@ function mapAuditTrail(detail: AssessmentDetail): AuditEvent[] {
     id: event.audit_id,
     timestamp: textOrFallback(event.timestamp ?? event.created_at, detail.created_at ?? new Date().toISOString()),
     actor: textOrFallback(event.actor ?? event.actor_id, 'Backend API'),
-    action: event.action.replace(/_/g, ' '),
-    details: event.message ?? detailsToText(event.details),
+    action: auditActionTitle(event.action),
+    details: auditMessage(event.action, event.details, event.message),
+    metadata: compactAuditMetadata(event.action, event.details),
     severity: event.action.toLowerCase().includes('override') ? 'warning' : 'info'
   }));
 }
@@ -428,7 +509,7 @@ export function AssessmentDetailPage() {
     <div>
       <PageHeader
         eyebrow="Assessment detail"
-        title={`${intake.patient.name} — ${record.id}`}
+        title={`${intake.patient.name} — ${shortAssessmentId(record.id)}`}
         description="Complete clinical decision-support view with patient intake, model probabilities, latency, safety-rule escalation, clinician review, audit trail, and PDF report generation."
         actions={
           <>
@@ -510,7 +591,17 @@ export function AssessmentDetailPage() {
                   <div key={event.id} className="rounded-2xl border border-slate-200 bg-white p-3">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="font-bold text-slate-950">{event.action}</p><p className="text-xs font-semibold text-slate-500">{formatDateTime(event.timestamp)}</p></div>
                     <p className="mt-1 text-sm text-slate-600">{event.details}</p>
-                    <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400">{event.actor}</p>
+                    {event.metadata?.length ? (
+                      <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {event.metadata.map((item) => (
+                          <div key={`${event.id}-${item.label}`} className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                            <dt className="text-[10px] font-black uppercase tracking-wide text-slate-400">{item.label}</dt>
+                            <dd className="mt-0.5 text-xs font-semibold text-slate-700 [overflow-wrap:anywhere]">{item.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
+                    <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400 [overflow-wrap:anywhere]">{event.actor}</p>
                   </div>
                 ))}
               </div>

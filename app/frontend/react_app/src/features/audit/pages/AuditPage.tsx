@@ -76,6 +76,16 @@ export function AuditPage() {
                       <div>
                         <p className="font-bold text-slate-950">{event.action}</p>
                         <p className="mt-1 text-sm leading-6 text-slate-600">{event.details}</p>
+                        {event.metadata?.length ? (
+                          <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                            {event.metadata.map((item) => (
+                              <div key={`${event.id}-${item.label}`} className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                                <dt className="text-[10px] font-black uppercase tracking-wide text-slate-400">{item.label}</dt>
+                                <dd className="mt-0.5 text-xs font-semibold text-slate-700 [overflow-wrap:anywhere]">{item.value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        ) : null}
                         <p className="font-data mt-1 text-xs font-semibold text-slate-500">
                           {event.patient} • {event.assessmentId}
                         </p>
@@ -84,7 +94,7 @@ export function AuditPage() {
                     <div className="text-left lg:text-right">
                       <Badge className={severityTone[event.severity]}>{event.severity}</Badge>
                       <p className="mt-2 text-xs font-semibold text-slate-500">{formatDateTime(event.timestamp)}</p>
-                      <p className="text-xs text-slate-400">{event.actor}</p>
+                      <p className="text-xs text-slate-400 [overflow-wrap:anywhere]">{event.actor}</p>
                     </div>
                   </div>
                 </div>

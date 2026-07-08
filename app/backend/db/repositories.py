@@ -1,5 +1,6 @@
 """Small repository helpers for database-backed API routes."""
 
+import copy
 import json
 from typing import Any
 
@@ -21,7 +22,12 @@ from app.backend.schemas.report import ReportRequest
 
 
 def create_patient_from_intake(db: Session, intake: PatientIntakeRequest) -> Patient:
-    patient = Patient(age=intake.patient_age, sex=intake.sex)
+    patient = Patient(
+        name=intake.patient_name,
+        mrn=intake.mrn,
+        age=intake.patient_age,
+        sex=intake.sex,
+    )
     db.add(patient)
     db.flush()
     return patient
@@ -176,11 +182,12 @@ def create_audit_log(
     action: str,
     details: dict[str, Any] | None,
 ) -> AuditLog:
+    details_snapshot = copy.deepcopy(details) if details is not None else None
     audit_log = AuditLog(
         assessment_id=assessment_id,
         actor_id=actor_id,
         action=action,
-        details_json=json.dumps(details) if details is not None else None,
+        details_json=json.dumps(details_snapshot) if details_snapshot is not None else None,
     )
     db.add(audit_log)
     db.commit()

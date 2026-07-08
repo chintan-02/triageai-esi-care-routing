@@ -32,6 +32,8 @@ export interface ReadyResponse {
 }
 
 export interface PatientIntakePayload {
+  patient_name?: string | null;
+  mrn?: string | null;
   patient_age: number;
   sex?: string | null;
   chief_complaint: string;
@@ -132,6 +134,7 @@ export interface AssessmentListItem {
   model_predicted_esi?: EsiLevel | null;
   confidence_score?: number | null;
   latency_ms?: number | null;
+  model_version?: string | null;
   safety_escalated: boolean;
   safety_gate_status?: string | null;
   status?: string | null;

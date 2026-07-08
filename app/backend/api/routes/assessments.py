@@ -93,6 +93,16 @@ def _risk_flags_from_safety_rules(safety_rules: list[Any]) -> list[str]:
     return flags
 
 
+def _patient_name(assessment: Any) -> str:
+    name = getattr(getattr(assessment, "patient", None), "name", None)
+    return name if isinstance(name, str) and name.strip() else "Unknown patient"
+
+
+def _patient_mrn(assessment: Any) -> str:
+    mrn = getattr(getattr(assessment, "patient", None), "mrn", None)
+    return mrn if isinstance(mrn, str) and mrn.strip() else "N/A"
+
+
 def _build_assessment_audit_events(
     db: Session,
     assessment: Any,
@@ -102,7 +112,10 @@ def _build_assessment_audit_events(
         _audit_event(
             audit_id=f"assessment:{assessment.id}",
             action="assessment_created",
-            details={"status": assessment.status},
+            details={
+                "status": "pending_review",
+                "message": "Assessment created and queued for clinician review.",
+            },
             created_at=assessment.created_at,
         )
     ]
@@ -115,6 +128,11 @@ def _build_assessment_audit_events(
                     "predicted_esi": latest_prediction.predicted_esi,
                     "final_esi": latest_prediction.final_esi,
                     "final_source": latest_prediction.final_source,
+                    "message": (
+                        "Model prediction generated. "
+                        f"Predicted ESI {latest_prediction.predicted_esi}, "
+                        f"final ESI {latest_prediction.final_esi}."
+                    ),
                 },
                 created_at=latest_prediction.created_at,
             )
@@ -186,8 +204,8 @@ def list_assessments(db: Session = Depends(get_db)) -> list[AssessmentListItem]:
             AssessmentListItem(
                 assessment_id=assessment.id,
                 patient_id=assessment.patient_id,
-                patient_name="Unknown patient",
-                mrn="N/A",
+                patient_name=_patient_name(assessment),
+                mrn=_patient_mrn(assessment),
                 age=assessment.patient.age if assessment.patient else None,
                 sex=assessment.patient.sex if assessment.patient else None,
                 arrival_mode=assessment.arrival_mode,
@@ -221,6 +239,8 @@ def get_assessment(
         raise HTTPException(status_code=404, detail="Assessment not found")
 
     intake = PatientIntakeRequest(
+        patient_name=assessment.patient.name if assessment.patient else None,
+        mrn=assessment.patient.mrn if assessment.patient else None,
         patient_age=assessment.patient.age if assessment.patient else None,
         sex=assessment.patient.sex if assessment.patient else None,
         chief_complaint=assessment.chief_complaint,
@@ -304,8 +324,8 @@ def get_assessment(
         request_id=request_id,
         assessment_id=assessment.id,
         patient_id=assessment.patient_id,
-        patient_name="Unknown patient",
-        mrn="N/A",
+        patient_name=_patient_name(assessment),
+        mrn=_patient_mrn(assessment),
         age=assessment.patient.age if assessment.patient else None,
         sex=assessment.patient.sex if assessment.patient else None,
         status=assessment.status,

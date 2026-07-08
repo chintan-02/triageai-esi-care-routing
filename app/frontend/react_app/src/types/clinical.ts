@@ -126,6 +126,7 @@ export interface AuditEvent {
   actor: string;
   action: string;
   details: string;
+  metadata?: Array<{ label: string; value: string }>;
   severity: 'info' | 'warning' | 'critical';
 }
 

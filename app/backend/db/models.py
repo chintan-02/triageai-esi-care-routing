@@ -30,6 +30,8 @@ class Patient(Base):
     __tablename__ = "patients"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    mrn: Mapped[str | None] = mapped_column(String, nullable=True)
     age: Mapped[int] = mapped_column(Integer, nullable=False)
     sex: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

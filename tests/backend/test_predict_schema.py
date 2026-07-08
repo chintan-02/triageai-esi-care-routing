@@ -16,10 +16,21 @@ def valid_intake_payload() -> dict[str, object]:
     }
 
 
+def identified_intake_payload() -> dict[str, object]:
+    return {
+        **valid_intake_payload(),
+        "patient_name": "Alex Morgan",
+        "mrn": "MRN-4242",
+        "sex": "female",
+    }
+
+
 def test_patient_intake_schema_validates_bounds() -> None:
-    intake = PatientIntakeRequest(**valid_intake_payload())
+    intake = PatientIntakeRequest(**identified_intake_payload())
 
     assert intake.patient_age == 42
+    assert intake.patient_name == "Alex Morgan"
+    assert intake.mrn == "MRN-4242"
     assert intake.chief_complaint == "Chest discomfort"
 
 
@@ -53,6 +64,34 @@ def test_predict_returns_model_aware_response() -> None:
         assert body["confidence_score"] is None
         assert body["probabilities"] == {}
     assert "not a diagnosis" in body["disclaimer"]
+    response_text = " ".join(
+        str(body.get(field) or "")
+        for field in ("explanation", "clinician_summary", "recommendation")
+    )
+    assert "ESIis" not in response_text
+    assert "modelprobability" not in response_text
+    assert "Currentfinal" not in response_text
+
+
+def test_predict_persists_patient_identity() -> None:
+    predict_response = client.post("/predict", json=identified_intake_payload())
+    assert predict_response.status_code == 200
+    assessment_id = predict_response.json()["assessment_id"]
+
+    detail_response = client.get(f"/assessments/{assessment_id}")
+    assert detail_response.status_code == 200
+    detail_body = detail_response.json()
+    assert detail_body["patient_name"] == "Alex Morgan"
+    assert detail_body["mrn"] == "MRN-4242"
+
+    list_response = client.get("/assessments")
+    assert list_response.status_code == 200
+    list_body = list_response.json()
+    matching = next(
+        item for item in list_body if item["assessment_id"] == assessment_id
+    )
+    assert matching["patient_name"] == "Alex Morgan"
+    assert matching["mrn"] == "MRN-4242"
 
 
 def test_predict_rejects_invalid_intake() -> None:

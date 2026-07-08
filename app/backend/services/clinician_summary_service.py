@@ -2,6 +2,7 @@
 
 from app.backend.schemas.intake import PatientIntakeRequest
 from app.backend.schemas.prediction import SafetyRuleResult
+from app.backend.services.text_formatting import clean_human_readable_text
 
 
 def build_placeholder_clinician_summary() -> str:
@@ -37,7 +38,7 @@ def build_clinician_summary(
     triggered = [rule.message for rule in safety_rules if rule.triggered]
     confidence = ""
     if predicted_esi is not None:
-        confidence = f" Model predicted ESI {predicted_esi}"
+        confidence = f"Model predicted ESI {predicted_esi}"
         predicted_key = f"ESI_{predicted_esi}"
         if predicted_key in probabilities:
             confidence += f" ({probabilities[predicted_key]:.2f})."
@@ -60,4 +61,4 @@ def build_clinician_summary(
     elif final_esi is not None:
         summary_parts.append(f"Final ESI {final_esi}; clinician review recommended.")
 
-    return " ".join(summary_parts)
+    return clean_human_readable_text(" ".join(summary_parts)) or ""
