@@ -144,6 +144,7 @@ export interface AssessmentListItem {
   reviewer_role?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  report_ids?: string[] | null;
 }
 
 export interface AssessmentDetail extends AssessmentListItem {
