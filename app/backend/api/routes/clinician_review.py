@@ -13,6 +13,14 @@ from app.backend.services.audit_service import build_audit_details
 router = APIRouter(prefix="/clinician-review", tags=["clinician-review"])
 
 
+def _normalize_review_status(action: str) -> str:
+    if action == "override":
+        return "overridden"
+    if action == "accept":
+        return "accepted"
+    return "pending"
+
+
 @router.post("", response_model=ClinicianReviewResponse)
 def submit_clinician_review(
     review: ClinicianReviewRequest,
@@ -36,8 +44,9 @@ def submit_clinician_review(
 
     review_record = repositories.create_clinician_review(db, review)
     status = "needs_review" if review.action == "needs_review" else "review_completed"
+    review_status_normalized = _normalize_review_status(review.action)
     repositories.update_assessment_status(db, review.assessment_id, status)
-    repositories.create_audit_log(
+    audit_event = repositories.create_audit_log(
         db=db,
         assessment_id=review.assessment_id,
         actor_id=review.clinician_id,
@@ -53,9 +62,17 @@ def submit_clinician_review(
         assessment_id=review.assessment_id,
         clinician_decision=review.action,
         clinician_final_esi=review_record.final_esi,
+        final_esi=review_record.final_esi,
         review_note=review_record.override_reason or review_record.notes,
         status=status,
+        review_status=review_status_normalized,
+        review_status_normalized=review_status_normalized,
+        review_status_raw=status,
+        reviewer=review.clinician_id,
+        reviewer_role=None,
         reviewed=status == "review_completed",
+        reviewed_at=review_record.created_at,
+        audit_event_created=audit_event is not None,
         message="Clinician review saved and audit trail updated.",
         is_placeholder=False,
         timestamp=review_record.created_at,

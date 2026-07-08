@@ -97,3 +97,62 @@ def download_report(
         filename=report_file_name(report_id),
         media_type="application/pdf",
     )
+
+
+def get_or_generate_assessment_report_pdf(
+    assessment_id: str,
+    db: Session,
+) -> FileResponse:
+    assessment = repositories.get_assessment_by_id(db, assessment_id)
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    existing_report = repositories.get_latest_report_for_assessment(db, assessment_id)
+    if existing_report is not None:
+        pdf_path = report_file_path(settings.REPORT_OUTPUT_DIR, existing_report.id)
+        if pdf_path.exists() and pdf_path.is_file():
+            return FileResponse(
+                path=pdf_path,
+                filename=report_file_name(existing_report.id),
+                media_type="application/pdf",
+            )
+
+    report_record = repositories.create_report_record(
+        db,
+        ReportRequest(assessment_id=assessment_id, include_audit=True),
+    )
+    latest_prediction = repositories.get_latest_prediction_for_assessment(db, assessment_id)
+    latest_review = repositories.get_latest_clinician_review_for_assessment(db, assessment_id)
+    audit_logs = repositories.list_audit_logs_for_assessment(db, assessment_id)
+    pdf_path = generate_assessment_report_pdf(
+        assessment=assessment,
+        prediction=latest_prediction,
+        clinician_review=latest_review,
+        audit_logs=audit_logs,
+        report_id=report_record.id,
+        output_dir=settings.REPORT_OUTPUT_DIR,
+        include_audit=True,
+    )
+    repositories.update_report_record(
+        db,
+        report_id=report_record.id,
+        report_status="generated",
+        download_url=f"/reports/{report_record.id}/download",
+    )
+    repositories.create_audit_log(
+        db=db,
+        assessment_id=assessment_id,
+        actor_id=None,
+        action="report_generated",
+        details={
+            "report_id": report_record.id,
+            "report_status": "generated",
+            "download_url": f"/reports/{report_record.id}/download",
+        },
+    )
+
+    return FileResponse(
+        path=pdf_path,
+        filename=report_file_name(report_record.id),
+        media_type="application/pdf",
+    )

@@ -64,6 +64,11 @@ def list_recent_assessments(db: Session, limit: int = 10) -> list[Assessment]:
     return list(db.scalars(statement).all())
 
 
+def list_assessments(db: Session) -> list[Assessment]:
+    statement = select(Assessment).order_by(Assessment.created_at.desc())
+    return list(db.scalars(statement).all())
+
+
 def create_prediction(
     db: Session,
     assessment_id: str,
@@ -215,6 +220,20 @@ def update_report_record(
 
 def get_report_by_id(db: Session, report_id: str) -> Report | None:
     return db.get(Report, report_id)
+
+
+def list_reports_for_assessment(db: Session, assessment_id: str) -> list[Report]:
+    statement = (
+        select(Report)
+        .where(Report.assessment_id == assessment_id)
+        .order_by(Report.created_at.desc())
+    )
+    return list(db.scalars(statement).all())
+
+
+def get_latest_report_for_assessment(db: Session, assessment_id: str) -> Report | None:
+    reports = list_reports_for_assessment(db, assessment_id)
+    return reports[0] if reports else None
 
 
 def get_dashboard_summary(db: Session) -> dict[str, Any]:
