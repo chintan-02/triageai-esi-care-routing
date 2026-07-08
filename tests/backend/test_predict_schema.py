@@ -40,6 +40,8 @@ def test_predict_returns_model_aware_response() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["assessment_id"]
+    assert isinstance(body["latency_ms"], int)
+    assert body["latency_ms"] >= 0
     assert body["acuity_scale"] == "ESI"
     assert "model_loaded" in body
     assert isinstance(body["model_loaded"], bool)
@@ -83,6 +85,8 @@ def test_predict_persists_patient_identity() -> None:
     detail_body = detail_response.json()
     assert detail_body["patient_name"] == "Alex Morgan"
     assert detail_body["mrn"] == "MRN-4242"
+    assert detail_body["latency_ms"] == predict_response.json()["latency_ms"]
+    assert detail_body["latest_prediction"]["latency_ms"] == predict_response.json()["latency_ms"]
 
     list_response = client.get("/assessments")
     assert list_response.status_code == 200
@@ -92,6 +96,7 @@ def test_predict_persists_patient_identity() -> None:
     )
     assert matching["patient_name"] == "Alex Morgan"
     assert matching["mrn"] == "MRN-4242"
+    assert matching["latency_ms"] == predict_response.json()["latency_ms"]
 
 
 def test_predict_rejects_invalid_intake() -> None:

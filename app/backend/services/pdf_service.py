@@ -203,7 +203,7 @@ class FinalDecisionCard(Flowable):
         metrics = [
             ("Model prediction", _esi(predicted_esi)),
             ("Confidence", _percent(self.prediction.confidence_score if self.prediction else None)),
-            ("Latency", "N/A"),
+            ("Latency", _latency_ms(self.prediction)),
             ("Safety gate", _safety_gate_status(self.prediction)),
             ("Clinician review", _review_status(self.clinician_review)),
             ("Assessment time", _display(getattr(self.prediction, "created_at", None) or self.assessment.created_at)),
@@ -1525,6 +1525,16 @@ def _percent(value: Any) -> str:
         return f"{float(value) * 100:.1f}%"
     except (TypeError, ValueError):
         return "Not documented"
+
+
+def _latency_ms(prediction: Prediction | None) -> str:
+    latency = getattr(prediction, "latency_ms", None)
+    if latency is None:
+        return "Not captured"
+    try:
+        return f"{int(latency)} ms"
+    except (TypeError, ValueError):
+        return "Not captured"
 
 
 def _unit(value: Any, unit: str) -> str:

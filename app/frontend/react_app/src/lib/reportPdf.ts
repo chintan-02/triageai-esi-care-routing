@@ -319,7 +319,7 @@ export async function generateAssessmentPdf(record: AssessmentRecord) {
   const metrics = [
     ['Model prediction', `ESI ${prediction.predictedEsi}`],
     ['Confidence', formatPercent(prediction.confidence)],
-    ['Latency', `${prediction.latencyMs} ms`],
+    ['Latency', prediction.latencyMs === null ? 'Not captured' : `${prediction.latencyMs} ms`],
     ['Safety gate', safety.triggered ? 'Review triggered' : 'No escalation'],
     ['Clinician review', normalized.status],
     ['Assessment time', formatDateTime(prediction.createdAt)]

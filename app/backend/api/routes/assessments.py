@@ -127,6 +127,7 @@ def _build_assessment_audit_events(
                 details={
                     "predicted_esi": latest_prediction.predicted_esi,
                     "final_esi": latest_prediction.final_esi,
+                    "latency_ms": latest_prediction.latency_ms,
                     "final_source": latest_prediction.final_source,
                     "message": (
                         "Model prediction generated. "
@@ -214,7 +215,7 @@ def list_assessments(db: Session = Depends(get_db)) -> list[AssessmentListItem]:
                 final_esi=final_esi,
                 model_predicted_esi=latest_prediction.predicted_esi if latest_prediction else None,
                 confidence_score=latest_prediction.confidence_score if latest_prediction else None,
-                latency_ms=None,
+                latency_ms=latest_prediction.latency_ms if latest_prediction else None,
                 safety_escalated=safety_escalated,
                 safety_gate_status="escalated" if safety_escalated else "clear",
                 status=assessment.status,
@@ -275,6 +276,7 @@ def get_assessment(
             predicted_esi=latest_prediction.predicted_esi,
             final_esi=latest_prediction.final_esi,
             confidence_score=latest_prediction.confidence_score,
+            latency_ms=latest_prediction.latency_ms,
             probabilities=_json_or_default(latest_prediction.probabilities_json, {}),
             safety_rules_triggered=_json_or_default(
                 latest_prediction.safety_rules_json,
@@ -367,7 +369,7 @@ def get_assessment(
             else {}
         ),
         confidence=latest_prediction.confidence_score if latest_prediction else None,
-        latency_ms=None,
+        latency_ms=latest_prediction.latency_ms if latest_prediction else None,
         model_version=latest_prediction.model_version if latest_prediction else None,
         request_id_value=request_id,
         review_status=review_status,

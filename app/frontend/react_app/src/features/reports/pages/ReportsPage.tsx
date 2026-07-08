@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { EsiBadge } from '@/components/clinical/EsiBadge';
+import { LatencyBadge } from '@/components/clinical/LatencyBadge';
 import { ReviewStatusBadge } from '@/components/clinical/ReviewStatusBadge';
 import { SkeletonTableRows } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -29,6 +30,7 @@ type ReportRow = {
   chiefComplaint: string;
   finalEsi: EsiLevel | null;
   predictedEsi: EsiLevel | null;
+  latencyMs: number | null;
   reviewStatus: ReviewStatus;
   createdAt: string | null;
   hasBackendReport: boolean;
@@ -56,6 +58,7 @@ function mapReportRow(item: AssessmentListItem): ReportRow {
     chiefComplaint: textOrFallback(item.chief_complaint, 'Not documented'),
     finalEsi: isEsiLevel(item.final_esi) ? item.final_esi : null,
     predictedEsi: isEsiLevel(item.model_predicted_esi) ? item.model_predicted_esi : null,
+    latencyMs: typeof item.latency_ms === 'number' ? item.latency_ms : null,
     reviewStatus: normalizeReviewStatus(item),
     createdAt: item.created_at ?? item.updated_at ?? null,
     hasBackendReport: Array.isArray(item.report_ids) && item.report_ids.length > 0,
@@ -135,6 +138,7 @@ export function ReportsPage() {
           `final esi ${record.finalEsi ?? 'n/a'}`,
           `model esi ${record.predictedEsi ?? 'n/a'}`,
           `predicted esi ${record.predictedEsi ?? 'n/a'}`,
+          `latency ${record.latencyMs ?? 'not captured'}`,
           `esi ${record.finalEsi ?? record.predictedEsi ?? 'n/a'}`,
           record.reviewStatus,
           record.hasBackendReport ? 'available' : 'on demand'
@@ -214,7 +218,7 @@ export function ReportsPage() {
           ) : null}
           <CardBody className="overflow-x-auto p-0">
             {isLoading ? (
-              <SkeletonTableRows rows={6} cols={7} />
+              <SkeletonTableRows rows={6} cols={8} />
             ) : records.length === 0 ? (
               <div className="p-6">
                 <EmptyState
@@ -237,13 +241,14 @@ export function ReportsPage() {
                 />
               </div>
             ) : (
-              <table className="w-full min-w-[900px] text-left text-sm">
+              <table className="w-full min-w-[960px] text-left text-sm">
                 <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="px-5 py-3">Report / Assessment</th>
                     <th className="px-5 py-3">Patient</th>
                     <th className="px-5 py-3">Model ESI</th>
                     <th className="px-5 py-3">Final ESI</th>
+                    <th className="px-5 py-3">Latency</th>
                     <th className="px-5 py-3">Review Status</th>
                     <th className="px-5 py-3">Created</th>
                     <th className="px-5 py-3 text-right">Download</th>
@@ -265,6 +270,13 @@ export function ReportsPage() {
                       </td>
                       <td className="px-5 py-4">
                         <EsiCell level={record.finalEsi} />
+                      </td>
+                      <td className="px-5 py-4">
+                        {record.latencyMs === null ? (
+                          <span className="text-xs font-semibold text-slate-500">—</span>
+                        ) : (
+                          <LatencyBadge ms={record.latencyMs} size="sm" />
+                        )}
                       </td>
                       <td className="px-5 py-4">
                         <ReviewStatusBadge status={record.reviewStatus} />

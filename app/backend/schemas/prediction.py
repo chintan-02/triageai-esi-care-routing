@@ -28,6 +28,7 @@ class ESIPredictionResponse(BaseModel):
     predicted_esi: int | None = Field(default=None, ge=1, le=5)
     final_esi: int | None = Field(default=None, ge=1, le=5)
     confidence_score: float | None = Field(default=None, ge=0, le=1)
+    latency_ms: int | None = Field(default=None, ge=0)
     probabilities: dict[str, float]
     safety_rules_triggered: list[SafetyRuleResult]
     final_source: str

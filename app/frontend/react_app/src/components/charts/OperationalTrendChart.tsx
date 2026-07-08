@@ -44,8 +44,8 @@ export function OperationalTrendChart({
         <Tooltip
           contentStyle={{ borderRadius: 12, border: '1px solid #E2E8F0', fontSize: 12 }}
           formatter={(value, name) => {
-            if (name === 'latency') return [value === null ? 'N/A' : `${Number(value)} ms`, 'Latency'];
-            return [value === null ? 'N/A' : `${Number(value)}%`, 'Confidence'];
+            if (name === 'latency') return [value === null ? '—' : `${Number(value)} ms`, 'Latency'];
+            return [value === null ? '—' : `${Number(value)}%`, 'Confidence'];
           }}
         />
         <Bar yAxisId="latency" dataKey="latency" fill="#CBD5E1" radius={[6, 6, 0, 0]} barSize={18} />

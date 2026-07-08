@@ -14,21 +14,30 @@ def init_db() -> None:
     from app.backend.db.session import engine
 
     Base.metadata.create_all(bind=engine)
-    _ensure_sqlite_patient_identity_columns(engine)
+    _ensure_sqlite_compat_columns(engine)
 
 
-def _ensure_sqlite_patient_identity_columns(engine: object) -> None:
+def _ensure_sqlite_compat_columns(engine: object) -> None:
     dialect = getattr(engine, "dialect", None)
     if getattr(dialect, "name", None) != "sqlite":
         return
 
     inspector = inspect(engine)
-    if "patients" not in inspector.get_table_names():
-        return
+    table_names = set(inspector.get_table_names())
 
-    existing_columns = {column["name"] for column in inspector.get_columns("patients")}
     with engine.begin() as connection:
-        if "name" not in existing_columns:
-            connection.execute(text("ALTER TABLE patients ADD COLUMN name VARCHAR"))
-        if "mrn" not in existing_columns:
-            connection.execute(text("ALTER TABLE patients ADD COLUMN mrn VARCHAR"))
+        if "patients" in table_names:
+            existing_patient_columns = {
+                column["name"] for column in inspector.get_columns("patients")
+            }
+            if "name" not in existing_patient_columns:
+                connection.execute(text("ALTER TABLE patients ADD COLUMN name VARCHAR"))
+            if "mrn" not in existing_patient_columns:
+                connection.execute(text("ALTER TABLE patients ADD COLUMN mrn VARCHAR"))
+
+        if "predictions" in table_names:
+            existing_prediction_columns = {
+                column["name"] for column in inspector.get_columns("predictions")
+            }
+            if "latency_ms" not in existing_prediction_columns:
+                connection.execute(text("ALTER TABLE predictions ADD COLUMN latency_ms INTEGER"))

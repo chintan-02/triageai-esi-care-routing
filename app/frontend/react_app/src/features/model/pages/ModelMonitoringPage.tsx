@@ -43,7 +43,7 @@ export function ModelMonitoringPage() {
   const latest = useMemo(() => latestAssessment(recent), [recent]);
   const avgLatency = useMemo(() => {
     const latencies = recent.map((record) => record.latency_ms).filter((value): value is number => typeof value === 'number');
-    return latencies.length ? Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length) : 0;
+    return latencies.length ? Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length) : null;
   }, [recent]);
   const avgConfidence = useMemo(() => {
     const confidences = recent.map((record) => record.confidence_score).filter((value): value is number => typeof value === 'number');
@@ -78,7 +78,7 @@ export function ModelMonitoringPage() {
           <StatCard label="Backend" value={backendReady ? 'Ready' : 'Unavailable'} hint={readiness?.database ?? 'FastAPI readiness'} icon={<Gauge size={22} />} tone="model" />
           <StatCard label="Model Loaded" value={readiness?.model_loaded ? 'Yes' : 'No'} hint={readiness?.model_source ?? 'Model registry source'} icon={<Workflow size={22} />} tone="blue" />
           <StatCard label="Placeholders" value={readiness?.is_placeholder ? 'Yes' : 'No'} hint="Backend /ready placeholder flag" icon={<ShieldCheck size={22} />} tone="red" />
-          <StatCard label="Avg Latency" value={`${avgLatency || 0} ms`} hint="Observed assessment response time" icon={<Timer size={22} />} tone="amber" />
+          <StatCard label="Avg Latency" value={avgLatency === null ? '—' : `${avgLatency} ms`} hint="Observed assessment response time" icon={<Timer size={22} />} tone="amber" />
         </div>
       )}
 

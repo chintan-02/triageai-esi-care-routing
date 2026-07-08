@@ -24,6 +24,7 @@ class RecentAssessmentItem(BaseModel):
     clinician_decision: str | None = None
     final_source: str | None = None
     confidence_score: float | None = None
+    latency_ms: int | None = None
 
 
 class DashboardSummaryResponse(BaseModel):

@@ -469,7 +469,12 @@ export function buildDashboardSummary(records: AssessmentRecord[]): DashboardSum
   const total = records.length;
   const pendingReviews = records.filter((record) => record.review.status === 'pending').length;
   const highRiskEscalations = records.filter((record) => record.prediction.finalEsi < record.prediction.predictedEsi).length;
-  const avgLatencyMs = Math.round(records.reduce((sum, record) => sum + record.prediction.latencyMs, 0) / Math.max(total, 1));
+  const capturedLatencies = records
+    .map((record) => record.prediction.latencyMs)
+    .filter((value): value is number => typeof value === 'number');
+  const avgLatencyMs = capturedLatencies.length
+    ? Math.round(capturedLatencies.reduce((sum, value) => sum + value, 0) / capturedLatencies.length)
+    : 0;
   const avgConfidence = records.reduce((sum, record) => sum + record.prediction.confidence, 0) / Math.max(total, 1);
   const overrideRate = records.filter((record) => record.review.status === 'overridden').length / Math.max(total, 1);
   const esiDistribution = records.reduce<Record<string, number>>((acc, record) => {

@@ -95,6 +95,7 @@ class Prediction(Base):
     predicted_esi: Mapped[int | None] = mapped_column(Integer, nullable=True)
     final_esi: Mapped[int | None] = mapped_column(Integer, nullable=True)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     probabilities_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     safety_rules_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     final_source: Mapped[str] = mapped_column(String, nullable=False)

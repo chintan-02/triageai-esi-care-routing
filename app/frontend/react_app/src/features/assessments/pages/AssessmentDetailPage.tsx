@@ -21,7 +21,12 @@ import { VitalsGrid } from '@/components/clinical/VitalsGrid';
 import { formatDateTime, formatPercent } from '@/lib/formatters';
 import { hasPermission } from '@/lib/permissions';
 
-function FinalDecisionBanner({ predicted, final, confidence, latency, status, rules }: { predicted: EsiLevel; final: EsiLevel; confidence: number; latency: number; status: ClinicianReview['status']; rules: RuleHit[] }) {
+function LatencyValue({ ms, size = 'md' }: { ms: number | null; size?: 'sm' | 'md' }) {
+  if (ms === null) return <span className="text-xs font-semibold text-slate-500">—</span>;
+  return <LatencyBadge ms={ms} size={size} />;
+}
+
+function FinalDecisionBanner({ predicted, final, confidence, latency, status, rules }: { predicted: EsiLevel; final: EsiLevel; confidence: number; latency: number | null; status: ClinicianReview['status']; rules: RuleHit[] }) {
   const escalated = final < predicted;
   const ruleSummary = rules.map((rule) => rule.label).join(' + ');
   const safetyStatus = escalated ? 'Escalated by safety rules' : rules.length ? 'Safety rules confirmed routing' : 'No safety-rule escalation triggered';
@@ -54,7 +59,7 @@ function FinalDecisionBanner({ predicted, final, confidence, latency, status, ru
           </div>
           <div className="rounded-2xl border border-white/70 bg-white p-3 text-center">
             <p className="text-xs font-bold uppercase text-slate-500">Latency</p>
-            <p className="font-data mt-1 text-lg font-black text-slate-950">{latency} ms</p>
+            <p className="font-data mt-1 text-lg font-black text-slate-950">{latency === null ? '—' : `${latency} ms`}</p>
           </div>
           <div className="rounded-2xl border border-white/70 bg-white p-3 text-center">
             <p className="text-xs font-bold uppercase text-slate-500">Review</p>
@@ -115,6 +120,10 @@ function esiLevelOrFallback(value: unknown, fallback: EsiLevel): EsiLevel {
 
 function numberOrZero(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function textOrFallback(value: unknown, fallback: string): string {
@@ -318,7 +327,7 @@ function mapBackendAssessment(detail: AssessmentDetail): AssessmentRecord {
       predictedEsi,
       finalEsi,
       confidence: numberOrZero(latestPrediction?.confidence_score ?? detail.confidence_score ?? detail.confidence),
-      latencyMs: numberOrZero(detail.latency_ms),
+      latencyMs: numberOrNull(latestPrediction?.latency_ms ?? detail.latency_ms),
       probabilities: normalizeProbabilities(latestPrediction?.probabilities ?? detail.probabilities),
       thresholdProfile: textOrFallback(latestPrediction?.final_source, 'Backend final decision'),
       ruleHits: mapRuleHits(detail),
@@ -539,7 +548,7 @@ export function AssessmentDetailPage() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-center">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Latency</p>
-              <div className="mt-1.5 flex justify-center"><LatencyBadge ms={prediction.latencyMs} size="sm" /></div>
+              <div className="mt-1.5 flex justify-center"><LatencyValue ms={prediction.latencyMs} size="sm" /></div>
             </div>
           </div>
           <div className="mt-2 rounded-2xl border border-slate-200 bg-white p-2.5 text-center">

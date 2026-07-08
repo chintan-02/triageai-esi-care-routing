@@ -267,7 +267,7 @@ export function AssessmentsPage() {
                     </td>
                     <td className="px-5 py-4">
                       {record.latencyMs === null ? (
-                        <span className="text-xs font-semibold text-slate-500">N/A</span>
+                        <span className="text-xs font-semibold text-slate-500">—</span>
                       ) : (
                         <LatencyBadge ms={record.latencyMs} size="sm" />
                       )}

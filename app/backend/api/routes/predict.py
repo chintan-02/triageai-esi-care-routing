@@ -1,3 +1,5 @@
+from time import perf_counter
+
 from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends
@@ -17,7 +19,9 @@ def predict_esi(
     db: Session = Depends(get_db),
 ) -> ESIPredictionResponse:
     assessment = repositories.create_assessment(db, intake)
+    started_at = perf_counter()
     response = predict_esi_for_intake(intake)
+    response.latency_ms = max(0, round((perf_counter() - started_at) * 1000))
     response.assessment_id = assessment.id
     repositories.create_prediction(db, assessment.id, response)
     return response

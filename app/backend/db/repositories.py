@@ -88,6 +88,7 @@ def create_prediction(
         predicted_esi=prediction_response.predicted_esi,
         final_esi=prediction_response.final_esi,
         confidence_score=prediction_response.confidence_score,
+        latency_ms=prediction_response.latency_ms,
         probabilities_json=json.dumps(prediction_response.probabilities),
         safety_rules_json=json.dumps(
             [rule.model_dump() for rule in prediction_response.safety_rules_triggered]
@@ -383,6 +384,7 @@ def get_dashboard_summary(db: Session) -> dict[str, Any]:
                 "confidence_score": (
                     latest_prediction.confidence_score if latest_prediction else None
                 ),
+                "latency_ms": latest_prediction.latency_ms if latest_prediction else None,
             }
         )
 

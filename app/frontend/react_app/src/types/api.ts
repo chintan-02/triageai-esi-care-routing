@@ -69,6 +69,7 @@ export interface PredictionResponse {
   predicted_esi?: EsiLevel | null;
   final_esi?: EsiLevel | null;
   confidence_score?: number | null;
+  latency_ms?: number | null;
   probabilities: Record<string, number>;
   safety_rules_triggered: SafetyRuleResult[];
   final_source: string;
@@ -87,6 +88,7 @@ export interface AssessmentPredictionDetail {
   predicted_esi?: EsiLevel | null;
   final_esi?: EsiLevel | null;
   confidence_score?: number | null;
+  latency_ms?: number | null;
   probabilities: Record<string, number>;
   safety_rules_triggered: Array<Record<string, unknown>>;
   final_source: string;

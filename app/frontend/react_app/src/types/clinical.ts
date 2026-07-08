@@ -92,7 +92,7 @@ export interface PredictionResponse {
   predictedEsi: EsiLevel;
   finalEsi: EsiLevel;
   confidence: number;
-  latencyMs: number;
+  latencyMs: number | null;
   probabilities: Record<string, number>;
   thresholdProfile: string;
   /** Deprecated compatibility field. Use GET /ready and backend registry metadata for model-level status. */
