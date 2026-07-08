@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 
 from app.backend.db.session import SessionLocal
+from app.backend.db.models import Report
+from app.backend.db import repositories
 from scripts import demo_reset_seed
 
 
@@ -55,23 +57,38 @@ def test_reset_requires_yes(monkeypatch, capsys) -> None:
 def test_demo_seed_payloads_are_valid() -> None:
     cases = demo_reset_seed.demo_cases()
 
-    assert len(cases) == 5
+    assert len(cases) == 6
     assert cases[0].review_action == "accept"
-    assert cases[1].intake.oxygen_saturation < 92
-    assert cases[2].review_action == "override"
-    assert cases[2].override_reason
-    assert cases[4].review_action is None
+    assert cases[0].intake.patient_name == "Demo Patient"
+    assert cases[0].intake.mrn == "MRN-DEMO-1001"
+    assert cases[2].review_action is None
+    assert cases[3].review_action is None
+    assert cases[4].intake.oxygen_saturation < 92
+    assert all(case.intake.patient_name for case in cases)
+    assert all(case.intake.mrn for case in cases)
 
 
 def test_seed_demo_data_creates_expected_isolated_cases() -> None:
     with SessionLocal() as db:
         summaries = demo_reset_seed.seed_demo_data(db)
+        dashboard = repositories.get_dashboard_summary(db)
+        report_count = db.query(Report).count()
 
-    assert len(summaries) == 5
+    assert len(summaries) == 6
     assert {summary["status"] for summary in summaries} == {
         "pending_review",
         "review_completed",
     }
-    assert summaries[1]["safety_rules_triggered"]
-    assert summaries[2]["clinician_decision"] == "override"
-    assert summaries[4]["clinician_decision"] == "pending"
+    assert all(summary["patient_name"] != "Unknown patient" for summary in summaries)
+    assert all(summary["mrn"] != "N/A" for summary in summaries)
+    assert all(summary["final_esi"] is not None for summary in summaries)
+    assert all(summary["latency_ms"] is not None for summary in summaries)
+    assert all(summary["report_id"] for summary in summaries)
+    assert summaries[2]["clinician_decision"] == "pending"
+    assert summaries[3]["clinician_decision"] == "pending"
+    assert summaries[4]["safety_rules_triggered"]
+    assert dashboard["total_assessments"] == 6
+    assert dashboard["pending_reviews"] == 2
+    assert dashboard["completed_reviews"] == 4
+    assert len(dashboard["recent_assessments"]) == 6
+    assert report_count == 6

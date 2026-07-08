@@ -11,14 +11,16 @@ from pathlib import Path
 from typing import Any
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     SimpleDocTemplate,
+    Flowable,
     KeepTogether,
     LongTable,
+    PageBreak,
     Paragraph,
     Spacer,
     Table,
@@ -29,8 +31,9 @@ from app.backend.db.models import Assessment, AuditLog, ClinicianReview, Predict
 
 
 REPORT_DISCLAIMER = (
-    "This report is for clinical decision-support workflow testing only and is "
-    "not a diagnosis or a substitute for clinician judgment."
+    "This report supports structured triage review and ESI care routing. It is "
+    "decision-support only, is not a diagnosis, and does not replace clinician "
+    "judgment, emergency protocols, or required clinician review."
 )
 
 MODEL_VS_CLINICIAN_NOTE = (
@@ -71,6 +74,161 @@ VALUE_LABELS = {
     "review_completed": "Review completed",
 }
 
+NAVY = colors.HexColor("#0B1B33")
+TEAL = colors.HexColor("#0D9488")
+SLATE_TEXT = colors.HexColor("#334155")
+SLATE_MUTED = colors.HexColor("#64748B")
+SLATE_LINE = colors.HexColor("#DCE5EF")
+SLATE_SOFT = colors.HexColor("#F8FAFC")
+AMBER_SOFT = colors.HexColor("#FFF7ED")
+RED_SOFT = colors.HexColor("#FEF2F2")
+GREEN_SOFT = colors.HexColor("#ECFDF5")
+GREEN = colors.HexColor("#047857")
+
+ESI_COLORS = {
+    1: colors.HexColor("#7F1D1D"),
+    2: colors.HexColor("#DC2626"),
+    3: colors.HexColor("#D97706"),
+    4: colors.HexColor("#2563EB"),
+    5: colors.HexColor("#16A34A"),
+}
+
+
+class HeaderBand(Flowable):
+    """Rounded navy report header modeled after the legacy frontend PDF."""
+
+    def __init__(
+        self,
+        *,
+        width: float,
+        assessment: Assessment,
+        prediction: Prediction | None,
+        clinician_review: ClinicianReview | None,
+        generated_at: datetime,
+    ) -> None:
+        super().__init__()
+        self.width = width
+        self.height = 92
+        self.assessment = assessment
+        self.prediction = prediction
+        self.clinician_review = clinician_review
+        self.generated_at = generated_at
+
+    def wrap(self, available_width: float, available_height: float) -> tuple[float, float]:
+        return self.width, self.height
+
+    def draw(self) -> None:
+        canvas = self.canv
+        final_esi = _report_final_esi(self.prediction, self.clinician_review)
+        badge_color = ESI_COLORS.get(final_esi, TEAL)
+        canvas.saveState()
+        canvas.setFillColor(NAVY)
+        canvas.roundRect(0, 0, self.width, self.height, 12, stroke=0, fill=1)
+        canvas.setFillColor(colors.white)
+        canvas.setFont("Helvetica-Bold", 18)
+        canvas.drawString(18, 63, "Clinical ESI Routing Summary")
+        canvas.setFillColor(colors.HexColor("#D9E7F5"))
+        canvas.setFont("Helvetica", 9.5)
+        canvas.drawString(18, 45, "Human-in-the-loop ESI care routing report - not a diagnostic tool")
+        canvas.setFillColor(colors.HexColor("#BED0E3"))
+        canvas.setFont("Helvetica", 8.1)
+        canvas.drawString(18, 25, f"Assessment ID: {_display(self.assessment.id)}")
+        canvas.drawString(18, 12, f"Generated time: {_display(self.generated_at)}")
+
+        badge_width = 98
+        badge_x = self.width - badge_width - 18
+        canvas.setFillColor(badge_color)
+        canvas.roundRect(badge_x, 47, badge_width, 30, 8, stroke=0, fill=1)
+        canvas.setFillColor(colors.white)
+        canvas.setFont("Helvetica-Bold", 13)
+        canvas.drawCentredString(badge_x + badge_width / 2, 58, f"FINAL {_esi_badge(final_esi)}")
+        canvas.setFillColor(colors.HexColor("#D9E7F5"))
+        canvas.setFont("Helvetica", 8)
+        canvas.drawRightString(self.width - 18, 29, f"Assessment time: {_display(getattr(self.prediction, 'created_at', None) or self.assessment.created_at)}")
+        if self.clinician_review is not None:
+            canvas.drawRightString(self.width - 18, 15, f"Reviewed time: {_display(self.clinician_review.created_at)}")
+        else:
+            canvas.drawRightString(self.width - 18, 15, "Reviewed time: Pending review")
+        canvas.restoreState()
+
+
+class FinalDecisionCard(Flowable):
+    """Large first-page routing card with ESI badge and compact metrics."""
+
+    def __init__(
+        self,
+        *,
+        width: float,
+        styles: dict[str, ParagraphStyle],
+        assessment: Assessment,
+        prediction: Prediction | None,
+        clinician_review: ClinicianReview | None,
+    ) -> None:
+        super().__init__()
+        self.width = width
+        self.height = 132
+        self.styles = styles
+        self.assessment = assessment
+        self.prediction = prediction
+        self.clinician_review = clinician_review
+
+    def wrap(self, available_width: float, available_height: float) -> tuple[float, float]:
+        return self.width, self.height
+
+    def draw(self) -> None:
+        canvas = self.canv
+        final_esi = _report_final_esi(self.prediction, self.clinician_review)
+        predicted_esi = self.prediction.predicted_esi if self.prediction is not None else None
+        badge_color = ESI_COLORS.get(final_esi, TEAL)
+        canvas.saveState()
+        canvas.setStrokeColor(SLATE_LINE)
+        canvas.setFillColor(colors.white)
+        canvas.roundRect(0, 0, self.width, self.height, 10, stroke=1, fill=1)
+
+        canvas.setFillColor(badge_color)
+        canvas.roundRect(14, self.height - 66, 96, 48, 9, stroke=0, fill=1)
+        canvas.setFillColor(colors.white)
+        canvas.setFont("Helvetica-Bold", 7.5)
+        canvas.drawCentredString(62, self.height - 31, "FINAL ROUTING")
+        canvas.setFont("Helvetica-Bold", 17)
+        canvas.drawCentredString(62, self.height - 49, _esi_badge(final_esi))
+
+        summary = Paragraph(_safe(_final_decision_summary(self.prediction, self.clinician_review)), self.styles["value_bold"])
+        summary.wrapOn(canvas, self.width - 142, 35)
+        summary.drawOn(canvas, 126, self.height - 38)
+        safety = Paragraph(_safe(f"Safety gate: {_safety_gate_result_text(self.prediction)}"), self.styles["body"])
+        safety.wrapOn(canvas, self.width - 142, 22)
+        safety.drawOn(canvas, 126, self.height - 62)
+
+        metrics = [
+            ("Model prediction", _esi(predicted_esi)),
+            ("Confidence", _percent(self.prediction.confidence_score if self.prediction else None)),
+            ("Latency", _latency_ms(self.prediction)),
+            ("Safety gate", _safety_gate_status(self.prediction)),
+            ("Clinician review", _review_status(self.clinician_review)),
+            ("Assessment time", _display(getattr(self.prediction, "created_at", None) or self.assessment.created_at)),
+        ]
+        metric_gap = 6
+        metric_width = (self.width - 28 - metric_gap * 2) / 3
+        metric_height = 24
+        for index, (label, value) in enumerate(metrics):
+            col = index % 3
+            row = index // 3
+            x = 14 + col * (metric_width + metric_gap)
+            y = 12 + (1 - row) * 28
+            canvas.setFillColor(SLATE_SOFT)
+            canvas.roundRect(x, y, metric_width, metric_height, 4, stroke=0, fill=1)
+            canvas.setFillColor(SLATE_MUTED)
+            canvas.setFont("Helvetica-Bold", 6.3)
+            canvas.drawString(x + 6, y + metric_height - 8, label.upper())
+            value_paragraph = Paragraph(
+                _safe(_display(value)),
+                self.styles["metric_chip_value"],
+            )
+            value_paragraph.wrapOn(canvas, metric_width - 12, 11)
+            value_paragraph.drawOn(canvas, x + 6, y + 4)
+        canvas.restoreState()
+
 
 def report_file_name(report_id: str) -> str:
     return f"triageai_report_{report_id}.pdf"
@@ -95,7 +253,7 @@ def generate_assessment_report_pdf(
 
     document = SimpleDocTemplate(
         str(output_path),
-        pagesize=letter,
+        pagesize=A4,
         rightMargin=0.55 * inch,
         leftMargin=0.55 * inch,
         topMargin=0.5 * inch,
@@ -104,14 +262,16 @@ def generate_assessment_report_pdf(
     )
     styles = _styles()
     content_width = document.width
+    generated_at = datetime.now(timezone.utc)
     story: list[Any] = []
 
-    _add_header(story, styles, assessment, content_width)
-    _add_disclaimer(story, styles)
-    _add_patient_snapshot(story, styles, assessment, content_width)
-    _add_model_output(story, styles, prediction, content_width)
-    _add_safety_rules(story, styles, prediction, content_width)
-    _add_narrative_sections(story, styles, prediction, content_width)
+    _add_header(story, styles, assessment, prediction, clinician_review, content_width, generated_at)
+    _add_final_decision(story, styles, assessment, prediction, clinician_review, content_width)
+    _add_model_metadata(story, styles, assessment, prediction, content_width)
+    _add_patient_snapshot(story, styles, assessment, prediction, content_width)
+    _add_vitals_table(story, styles, assessment, content_width)
+    story.append(PageBreak())
+    _add_model_and_safety_columns(story, styles, prediction, content_width)
     _add_clinician_review(story, styles, prediction, clinician_review, content_width)
     if include_audit:
         _add_audit_trail(
@@ -122,15 +282,62 @@ def generate_assessment_report_pdf(
             clinician_review,
             audit_logs,
             content_width,
+            generated_at,
         )
 
-    document.build(story, onFirstPage=_page_number, onLaterPages=_page_number)
+    document.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return output_path
 
 
 def _styles() -> dict[str, ParagraphStyle]:
     base = getSampleStyleSheet()
     return {
+        "header_title": ParagraphStyle(
+            "HeaderTitle",
+            parent=base["Title"],
+            fontName="Helvetica-Bold",
+            fontSize=18,
+            leading=22,
+            textColor=colors.white,
+            alignment=TA_LEFT,
+            spaceAfter=5,
+        ),
+        "header_subtitle": ParagraphStyle(
+            "HeaderSubtitle",
+            parent=base["Normal"],
+            fontName="Helvetica",
+            fontSize=9.5,
+            leading=13,
+            textColor=colors.HexColor("#D9E7F5"),
+            alignment=TA_LEFT,
+        ),
+        "header_meta": ParagraphStyle(
+            "HeaderMeta",
+            parent=base["Normal"],
+            fontName="Helvetica",
+            fontSize=8.2,
+            leading=11,
+            textColor=colors.HexColor("#BED0E3"),
+            alignment=TA_LEFT,
+        ),
+        "esi_badge": ParagraphStyle(
+            "EsiBadge",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=14,
+            leading=17,
+            textColor=colors.white,
+            alignment=TA_CENTER,
+        ),
+        "esi_badge_label": ParagraphStyle(
+            "EsiBadgeLabel",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=7,
+            leading=9,
+            textColor=colors.HexColor("#F8FAFC"),
+            alignment=TA_CENTER,
+        ),
         "title": ParagraphStyle(
             "ReportTitle",
             parent=base["Title"],
@@ -155,36 +362,124 @@ def _styles() -> dict[str, ParagraphStyle]:
             "SectionHeading",
             parent=base["Heading2"],
             fontName="Helvetica-Bold",
-            fontSize=11,
-            leading=14,
-            textColor=colors.HexColor("#0E1F35"),
-            spaceBefore=9,
-            spaceAfter=5,
+            fontSize=12,
+            leading=15,
+            textColor=NAVY,
+            spaceBefore=10,
+            spaceAfter=6,
         ),
         "body": ParagraphStyle(
             "ReportBody",
             parent=base["Normal"],
             fontName="Helvetica",
-            fontSize=8.5,
-            leading=12,
-            textColor=colors.HexColor("#1E3A52"),
+            fontSize=8.4,
+            leading=11.5,
+            textColor=SLATE_TEXT,
             spaceAfter=4,
         ),
         "label": ParagraphStyle(
             "TableLabel",
             parent=base["Normal"],
             fontName="Helvetica-Bold",
-            fontSize=8,
-            leading=10,
-            textColor=colors.HexColor("#526070"),
+            fontSize=7.6,
+            leading=9.5,
+            textColor=SLATE_MUTED,
         ),
         "value": ParagraphStyle(
             "TableValue",
             parent=base["Normal"],
             fontName="Helvetica",
-            fontSize=8,
-            leading=10,
-            textColor=colors.HexColor("#0E1F35"),
+            fontSize=8.1,
+            leading=10.5,
+            textColor=NAVY,
+        ),
+        "value_bold": ParagraphStyle(
+            "TableValueBold",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=8.4,
+            leading=10.8,
+            textColor=NAVY,
+        ),
+        "metric_label": ParagraphStyle(
+            "MetricLabel",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=7,
+            leading=8.5,
+            textColor=SLATE_MUTED,
+            alignment=TA_CENTER,
+        ),
+        "metric_value": ParagraphStyle(
+            "MetricValue",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            leading=13,
+            textColor=NAVY,
+            alignment=TA_CENTER,
+        ),
+        "metric_chip_value": ParagraphStyle(
+            "MetricChipValue",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=7.2,
+            leading=8,
+            textColor=NAVY,
+            alignment=TA_RIGHT,
+        ),
+        "right_value": ParagraphStyle(
+            "RightValue",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=8.2,
+            leading=10.5,
+            textColor=NAVY,
+            alignment=TA_RIGHT,
+        ),
+        "table_header": ParagraphStyle(
+            "TableHeader",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=7.6,
+            leading=9.5,
+            textColor=colors.white,
+        ),
+        "vital_header": ParagraphStyle(
+            "VitalHeader",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=7.8,
+            leading=9.6,
+            textColor=colors.white,
+            alignment=TA_CENTER,
+        ),
+        "vital_value": ParagraphStyle(
+            "VitalValue",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=8.4,
+            leading=10.5,
+            textColor=NAVY,
+            alignment=TA_CENTER,
+        ),
+        "vital_abnormal": ParagraphStyle(
+            "VitalAbnormal",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=8.4,
+            leading=10.5,
+            textColor=colors.HexColor("#92400E"),
+            alignment=TA_CENTER,
+        ),
+        "vital_critical": ParagraphStyle(
+            "VitalCritical",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=8.4,
+            leading=10.5,
+            textColor=colors.HexColor("#991B1B"),
+            alignment=TA_CENTER,
         ),
         "disclaimer": ParagraphStyle(
             "Disclaimer",
@@ -192,9 +487,9 @@ def _styles() -> dict[str, ParagraphStyle]:
             fontName="Helvetica-Bold",
             fontSize=8,
             leading=11,
-            textColor=colors.HexColor("#7A4B00"),
-            backColor=colors.HexColor("#FFF7DB"),
-            borderColor=colors.HexColor("#E5B84F"),
+            textColor=colors.HexColor("#7C2D12"),
+            backColor=AMBER_SOFT,
+            borderColor=colors.HexColor("#FDBA74"),
             borderWidth=0.5,
             borderPadding=6,
             spaceAfter=7,
@@ -205,7 +500,7 @@ def _styles() -> dict[str, ParagraphStyle]:
             fontName="Helvetica-Bold",
             fontSize=8,
             leading=11,
-            textColor=colors.HexColor("#7A4B00"),
+            textColor=colors.HexColor("#7C2D12"),
         ),
     }
 
@@ -214,26 +509,61 @@ def _add_header(
     story: list[Any],
     styles: dict[str, ParagraphStyle],
     assessment: Assessment,
+    prediction: Prediction | None,
+    clinician_review: ClinicianReview | None,
     content_width: float,
+    generated_at: datetime,
 ) -> None:
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    story.append(Paragraph("TriageAI / SympDirect", styles["title"]))
     story.append(
-        Paragraph(
-            "ESI Clinical Intake & Care Routing Assistant<br/>"
-            "Report type: Assessment Decision-Support Summary",
-            styles["subtitle"],
+        HeaderBand(
+            width=content_width,
+            assessment=assessment,
+            prediction=prediction,
+            clinician_review=clinician_review,
+            generated_at=generated_at,
         )
     )
+    story.append(Spacer(1, 6))
+
+
+def _add_final_decision(
+    story: list[Any],
+    styles: dict[str, ParagraphStyle],
+    assessment: Assessment,
+    prediction: Prediction | None,
+    clinician_review: ClinicianReview | None,
+    content_width: float,
+) -> None:
+    story.append(Paragraph("Final Routing Decision", styles["section"]))
+    story.append(
+        FinalDecisionCard(
+            width=content_width,
+            styles=styles,
+            assessment=assessment,
+            prediction=prediction,
+            clinician_review=clinician_review,
+        )
+    )
+    story.append(Spacer(1, 5))
+
+
+def _add_model_metadata(
+    story: list[Any],
+    styles: dict[str, ParagraphStyle],
+    assessment: Assessment,
+    prediction: Prediction | None,
+    content_width: float,
+) -> None:
     story.append(
         _key_value_table(
             styles,
             content_width,
             [
-                ("Generated", timestamp),
+                ("Request ID", prediction.id if prediction is not None else "Not captured"),
+                ("Model Version", prediction.model_version if prediction is not None else "Not captured"),
+                ("Threshold Profile", _threshold_profile_text(prediction)),
+                ("Model Scope", "Clinical decision-support classifier predicts ESI 3/4/5; safety gate and clinician review handle ESI 1/2 escalation"),
                 ("Assessment ID", assessment.id),
-                ("Patient ID", assessment.patient_id),
-                ("Assessment status", _readable_value(assessment.status)),
             ],
         )
     )
@@ -248,44 +578,65 @@ def _add_patient_snapshot(
     story: list[Any],
     styles: dict[str, ParagraphStyle],
     assessment: Assessment,
+    prediction: Prediction | None,
     content_width: float,
 ) -> None:
     story.append(
         KeepTogether(
             [
-                Paragraph("Patient / Intake Snapshot", styles["section"]),
+                Paragraph("Patient & Intake Summary", styles["section"]),
                 _key_value_table(
                     styles,
                     content_width,
                     [
-                        ("Age", getattr(assessment.patient, "age", None)),
-                        ("Gender/Sex", getattr(assessment.patient, "sex", None)),
-                        ("Chief complaint", assessment.chief_complaint),
-                        ("Symptom duration", assessment.symptom_duration),
-                        ("Arrival mode", assessment.arrival_mode),
+                        ("Patient", _patient_summary(assessment)),
+                        ("MRN", _patient_mrn(assessment)),
+                        ("Arrival Mode", assessment.arrival_mode),
+                        ("Chief Complaint", assessment.chief_complaint),
+                        ("Symptom Narrative", assessment.additional_context),
+                        ("Duration", assessment.symptom_duration),
+                        ("Selected risk flags", _risk_flags_text(prediction)),
+                        ("Comorbidities", "None selected"),
                         ("Consciousness level", assessment.consciousness_level),
-                        ("Pregnancy", _bool_label(assessment.pregnancy)),
-                        ("Additional context", assessment.additional_context),
                     ],
                 ),
             ]
         )
     )
-    story.append(Spacer(1, 5))
-    story.append(
-        _key_value_table(
-            styles,
-            content_width,
-            [
-                ("Temperature", _unit(assessment.temperature_c, "C")),
-                ("Heart rate", _unit(assessment.heart_rate, "bpm")),
-                ("Respiratory rate", _unit(assessment.respiratory_rate, "/min")),
-                ("Blood pressure", _blood_pressure(assessment)),
-                ("Oxygen saturation", _unit(assessment.oxygen_saturation, "%")),
-                ("Pain score", _unit(assessment.pain_score, "/10")),
-            ],
-        )
-    )
+
+
+def _add_vitals_table(
+    story: list[Any],
+    styles: dict[str, ParagraphStyle],
+    assessment: Assessment,
+    content_width: float,
+) -> None:
+    rows = _vital_cells(assessment)
+    table_rows = [
+        [Paragraph(_safe(label), styles["vital_header"]) for label, _, _ in rows],
+        [
+            Paragraph(_safe(f"{value}\n{status}"), _vital_style(styles, status))
+            for _, value, status in rows
+        ],
+    ]
+    table = Table(table_rows, colWidths=[content_width / 6] * 6)
+    commands: list[tuple[Any, ...]] = [
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BOX", (0, 0), (-1, -1), 0.4, SLATE_LINE),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, SLATE_LINE),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]
+    for index, (_, _, status) in enumerate(rows):
+        if status != "Documented":
+            commands.append(("BACKGROUND", (index, 1), (index, 1), RED_SOFT if status == "Critical display range" else AMBER_SOFT))
+    table.setStyle(TableStyle(commands))
+    story.append(KeepTogether([Paragraph("Vitals", styles["section"]), table, Spacer(1, 4), Paragraph("Highlighted values support review visibility; backend safety thresholds remain authoritative.", styles["body"])]))
 
 
 def _add_model_output(
@@ -306,29 +657,125 @@ def _add_model_output(
         return
 
     probabilities = _json_or_default(prediction.probabilities_json, {})
-    rows = [
-        ("Model version", prediction.model_version),
-        ("Model loaded", _bool_label(prediction.model_loaded)),
-        ("Predicted ESI", _esi(prediction.predicted_esi)),
-        ("Model final ESI", _esi(prediction.final_esi)),
-        ("Confidence", _percent(prediction.confidence_score)),
-        ("Final source", _readable_value(prediction.final_source)),
-        ("ESI 3 probability", _percent(probabilities.get("ESI_3"))),
-        ("ESI 4 probability", _percent(probabilities.get("ESI_4"))),
-        ("ESI 5 probability", _percent(probabilities.get("ESI_5"))),
-        ("Prediction timestamp", prediction.created_at),
+    probability_rows = [
+        [
+            Paragraph("Class", styles["label"]),
+            Paragraph("Probability", styles["label"]),
+            Paragraph("Visual weight", styles["label"]),
+        ],
+        *[
+            [
+                Paragraph(_safe(label.replace("_", " ")), styles["value_bold"]),
+                Paragraph(_safe(_percent(probabilities.get(label))), styles["right_value"]),
+                _probability_bar(styles, probabilities.get(label)),
+            ]
+            for label in ("ESI_3", "ESI_4", "ESI_5")
+        ],
     ]
+    probability_table = _standard_table(
+        probability_rows,
+        [content_width * 0.22, content_width * 0.20, content_width * 0.58],
+    )
+    metadata = _key_value_table(
+        styles,
+        content_width,
+        [
+            ("Model version", prediction.model_version),
+            ("Model loaded", _bool_label(prediction.model_loaded)),
+            ("Predicted ESI", _esi(prediction.predicted_esi)),
+            ("Model final ESI", _esi(prediction.final_esi)),
+            ("Confidence", _percent(prediction.confidence_score)),
+            ("Final source", _readable_value(prediction.final_source)),
+            ("Prediction timestamp", prediction.created_at),
+        ],
+    )
     story.append(
         KeepTogether(
             [
-                Paragraph("Model Output", styles["section"]),
-                _key_value_table(styles, content_width, rows),
+                Paragraph("Model Output Probabilities", styles["section"]),
+                probability_table,
+                Spacer(1, 6),
+                metadata,
             ]
         )
     )
 
 
-def _add_safety_rules(
+def _add_model_and_safety_columns(
+    story: list[Any],
+    styles: dict[str, ParagraphStyle],
+    prediction: Prediction | None,
+    content_width: float,
+) -> None:
+    column_gap = 0.18 * inch
+    column_width = (content_width - column_gap) / 2
+    left: list[Any] = [Paragraph("Model Output Probabilities", styles["section"])]
+    right: list[Any] = [Paragraph("Safety Rules & Recommendation", styles["section"])]
+
+    if prediction is None:
+        left.append(Paragraph("No model prediction is stored for this assessment.", styles["body"]))
+        right.append(Paragraph("No safety-rule output is stored for this assessment.", styles["body"]))
+    else:
+        probabilities = _json_or_default(prediction.probabilities_json, {})
+        probability_rows = [
+            [
+                Paragraph("Class", styles["table_header"]),
+                Paragraph("Probability", styles["table_header"]),
+                Paragraph("Visual weight", styles["table_header"]),
+            ],
+            *[
+                [
+                    Paragraph(_safe(label.replace("_", " ")), styles["value_bold"]),
+                    Paragraph(_safe(_percent(probabilities.get(label))), styles["right_value"]),
+                    _probability_bar(
+                        styles,
+                        probabilities.get(label),
+                        width=column_width * 0.42,
+                        accent=label == _top_probability_label(probabilities),
+                    ),
+                ]
+                for label in ("ESI_3", "ESI_4", "ESI_5")
+            ],
+        ]
+        left.append(
+            _standard_table(
+                probability_rows,
+                [column_width * 0.25, column_width * 0.25, column_width * 0.50],
+            )
+        )
+        left.append(Spacer(1, 5))
+        left.append(Paragraph("Raw model probabilities are shown for transparency and are not calibrated probabilities.", styles["body"]))
+
+        right.append(
+            _standard_table(
+                [
+                    [Paragraph("Signal", styles["table_header"]), Paragraph("Value", styles["table_header"])],
+                    [Paragraph("Rules Fired", styles["value_bold"]), Paragraph(_safe(_rules_fired_text(prediction)), styles["value"])],
+                    [Paragraph("Safety Gate Result", styles["value_bold"]), Paragraph(_safe(_safety_gate_result_text(prediction)), styles["value"])],
+                    [Paragraph("Explanation", styles["value_bold"]), Paragraph(_safe(_short_text(prediction.explanation, 360)), styles["value"])],
+                    [Paragraph("Recommendation", styles["value_bold"]), Paragraph(_safe(_short_text(prediction.recommendation, 220)), styles["value"])],
+                ],
+                [column_width * 0.30, column_width * 0.70],
+            )
+        )
+
+    grid = Table([[left, "", right]], colWidths=[column_width, column_gap, column_width])
+    grid.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    story.append(grid)
+    story.append(Spacer(1, 8))
+
+
+def _add_safety_rules_and_recommendation(
     story: list[Any],
     styles: dict[str, ParagraphStyle],
     prediction: Prediction | None,
@@ -338,7 +785,7 @@ def _add_safety_rules(
         story.append(
             KeepTogether(
                 [
-                    Paragraph("Safety Rules", styles["section"]),
+                    Paragraph("Safety Rules & Recommendation", styles["section"]),
                     Paragraph("No model prediction is stored for this assessment.", styles["body"]),
                 ]
             )
@@ -347,37 +794,39 @@ def _add_safety_rules(
 
     rules = _json_or_default(prediction.safety_rules_json, [])
     triggered = [rule for rule in rules if isinstance(rule, dict) and rule.get("triggered")]
+    section: list[Any] = [Paragraph("Safety Rules & Recommendation", styles["section"])]
     if not triggered:
-        story.append(
-            KeepTogether(
+        section.append(_status_box(styles, content_width, "No safety-rule escalation triggered.", GREEN_SOFT, GREEN))
+    else:
+        table_rows = [
+            [
+                Paragraph("Safety flag", styles["table_header"]),
+                Paragraph("Clinical meaning", styles["table_header"]),
+            ]
+        ]
+        for rule in triggered:
+            table_rows.append(
                 [
-                    Paragraph("Safety Rules", styles["section"]),
-                    Paragraph("No safety-rule escalation triggered.", styles["body"]),
+                    Paragraph(_safe(_safety_rule_label(rule.get("rule_id"))), styles["value_bold"]),
+                    Paragraph(
+                        _safe(rule.get("message") or "Safety-rule escalation triggered."),
+                        styles["value"],
+                    ),
                 ]
             )
+        section.append(
+            _standard_table(table_rows, [content_width * 0.33, content_width * 0.67])
         )
-        return
-
-    table_rows = [
+    section.extend(
         [
-            Paragraph("Safety flag", styles["label"]),
-            Paragraph("Clinical meaning", styles["label"]),
+            Spacer(1, 6),
+            _note_box(styles, content_width, "Recommendation", prediction.recommendation),
+            Spacer(1, 5),
+            _note_box(styles, content_width, "Clinical explanation", prediction.explanation),
+            Spacer(1, 5),
+            _note_box(styles, content_width, "Clinician summary", prediction.clinician_summary),
         ]
-    ]
-    for rule in triggered:
-        table_rows.append(
-            [
-                Paragraph(_safe(_safety_rule_label(rule.get("rule_id"))), styles["value"]),
-                Paragraph(
-                    _safe(rule.get("message") or "Safety-rule escalation triggered."),
-                    styles["value"],
-                ),
-            ]
-        )
-    section = [
-        Paragraph("Safety Rules", styles["section"]),
-        _standard_table(table_rows, [content_width * 0.33, content_width * 0.67]),
-    ]
+    )
     if len(triggered) <= 3:
         story.append(KeepTogether(section))
     else:
@@ -398,24 +847,6 @@ def _maybe_pain_override_note(
     )
 
 
-def _add_narrative_sections(
-    story: list[Any],
-    styles: dict[str, ParagraphStyle],
-    prediction: Prediction | None,
-    content_width: float,
-) -> None:
-    story.append(Paragraph("Recommendation And Explanation", styles["section"]))
-    if prediction is None:
-        story.append(Paragraph("No recommendation is stored for this assessment.", styles["body"]))
-        return
-
-    story.append(_note_box(styles, content_width, "Recommendation", prediction.recommendation))
-    story.append(Spacer(1, 5))
-    story.append(_note_box(styles, content_width, "Clinical explanation", prediction.explanation))
-    story.append(Spacer(1, 5))
-    story.append(_note_box(styles, content_width, "Clinician summary", prediction.clinician_summary))
-
-
 def _add_clinician_review(
     story: list[Any],
     styles: dict[str, ParagraphStyle],
@@ -428,7 +859,17 @@ def _add_clinician_review(
             KeepTogether(
                 [
                     Paragraph("Clinician Review", styles["section"]),
-                    Paragraph("Pending clinician review.", styles["body"]),
+                    _key_value_table(
+                        styles,
+                        content_width,
+                        [
+                            ("Status", "Pending review"),
+                            ("Reviewer", "Unassigned"),
+                            ("Final clinician decision", "Not yet reviewed"),
+                            ("Reviewed time", "Not yet reviewed"),
+                            ("Note", "Awaiting human-in-the-loop clinician review."),
+                        ],
+                    ),
                 ]
             )
         )
@@ -440,13 +881,11 @@ def _add_clinician_review(
             styles,
             content_width,
             [
-                ("Clinician decision", _readable_value(clinician_review.action)),
-                ("Clinician final ESI", _esi(clinician_review.final_esi)),
-                ("Override reason", clinician_review.override_reason),
-                ("Review note", clinician_review.notes),
-                ("Review timestamp", clinician_review.created_at),
-                ("Review ID", clinician_review.id),
-                ("Clinician ID", clinician_review.clinician_id),
+                ("Status", _readable_value(clinician_review.action)),
+                ("Reviewer", clinician_review.clinician_id),
+                ("Final clinician decision", _esi(clinician_review.final_esi)),
+                ("Reviewed time", clinician_review.created_at),
+                ("Note", clinician_review.notes or clinician_review.override_reason),
             ],
         ),
     ]
@@ -470,8 +909,23 @@ def _add_audit_trail(
     clinician_review: ClinicianReview | None,
     audit_logs: list[AuditLog],
     content_width: float,
+    generated_at: datetime,
 ) -> None:
-    story.append(Paragraph("Audit Trail", styles["section"]))
+    story.append(Paragraph("Audit Metadata / Audit Trail", styles["section"]))
+    story.append(
+        _key_value_table(
+            styles,
+            content_width,
+            [
+                ("Assessment ID", assessment.id),
+                ("Request ID", prediction.id if prediction is not None else "Not captured"),
+                ("Model Version", prediction.model_version if prediction is not None else "Not captured"),
+                ("Generated time", generated_at),
+                ("Review Status", _review_status(clinician_review)),
+            ],
+        )
+    )
+    story.append(Spacer(1, 6))
     events: list[tuple[Any, Any, Any, Any]] = [
         (
             assessment.created_at,
@@ -517,12 +971,25 @@ def _add_audit_trail(
             )
         )
 
+    total_events = len(events)
+    if total_events > 4:
+        events = [
+            *events[:2],
+            (
+                generated_at,
+                "Audit trail condensed",
+                "System",
+                {"status": f"Showing first 2 and latest event of {total_events} events."},
+            ),
+            events[-1],
+        ]
+
     table_rows = [
         [
-            Paragraph("Timestamp", styles["label"]),
-            Paragraph("Action", styles["label"]),
-            Paragraph("Actor", styles["label"]),
-            Paragraph("Details", styles["label"]),
+            Paragraph("Timestamp", styles["table_header"]),
+            Paragraph("Action", styles["table_header"]),
+            Paragraph("Actor", styles["table_header"]),
+            Paragraph("Details", styles["table_header"]),
         ]
     ]
     for timestamp, action, actor, details in events:
@@ -531,7 +998,7 @@ def _add_audit_trail(
                 Paragraph(_safe(_display(timestamp)), styles["value"]),
                 Paragraph(_safe(_display(action)), styles["value"]),
                 Paragraph(_safe(_display(actor)), styles["value"]),
-                Paragraph(_safe(_details_text(details)), styles["value"]),
+                Paragraph(_safe(_short_text(_details_text(details), 150)), styles["value"]),
             ]
         )
     story.append(
@@ -546,6 +1013,257 @@ def _add_audit_trail(
             long=True,
         )
     )
+
+
+def _report_final_esi(
+    prediction: Prediction | None,
+    clinician_review: ClinicianReview | None,
+) -> int | None:
+    if clinician_review is not None and clinician_review.final_esi is not None:
+        return clinician_review.final_esi
+    return prediction.final_esi if prediction is not None else None
+
+
+def _patient_summary(assessment: Assessment) -> str:
+    patient = getattr(assessment, "patient", None)
+    name = getattr(patient, "name", None)
+    display_name = name.strip() if isinstance(name, str) and name.strip() else "Not captured"
+    age = _display(getattr(patient, "age", None))
+    sex = _display(getattr(patient, "sex", None))
+    return f"{display_name} ({age}, {sex})"
+
+
+def _patient_mrn(assessment: Assessment) -> str:
+    mrn = getattr(getattr(assessment, "patient", None), "mrn", None)
+    return mrn.strip() if isinstance(mrn, str) and mrn.strip() else "Not captured"
+
+
+def _vital_cells(assessment: Assessment) -> list[tuple[str, str, str]]:
+    return [
+        ("HR", _unit(assessment.heart_rate, "bpm"), _vital_status("heart_rate", assessment.heart_rate)),
+        ("RR", _unit(assessment.respiratory_rate, "/min"), _vital_status("respiratory_rate", assessment.respiratory_rate)),
+        ("BP", _blood_pressure(assessment), _blood_pressure_status(assessment)),
+        ("Temp", _unit(assessment.temperature_c, "C"), _vital_status("temperature_c", assessment.temperature_c)),
+        ("SpO2", _unit(assessment.oxygen_saturation, "%"), _vital_status("oxygen_saturation", assessment.oxygen_saturation)),
+        ("Pain", _unit(assessment.pain_score, "/10"), _vital_status("pain_score", assessment.pain_score)),
+    ]
+
+
+def _vital_style(
+    styles: dict[str, ParagraphStyle],
+    status: str,
+) -> ParagraphStyle:
+    if status == "Critical display range":
+        return styles["vital_critical"]
+    if status == "Outside display range":
+        return styles["vital_abnormal"]
+    return styles["vital_value"]
+
+
+def _threshold_profile_text(prediction: Prediction | None) -> str:
+    if prediction is None:
+        return "Not captured"
+    return f"Backend safety gate / {_readable_value(prediction.final_source)}"
+
+
+def _risk_flags_text(prediction: Prediction | None) -> str:
+    triggered = _triggered_safety_rules(prediction)
+    if not triggered:
+        return "None selected"
+    return "; ".join(_safety_rule_label(rule.get("rule_id")) for rule in triggered)
+
+
+def _safety_gate_status(prediction: Prediction | None) -> str:
+    if prediction is None:
+        return "Not documented"
+    triggered = [
+        rule
+        for rule in _json_or_default(prediction.safety_rules_json, [])
+        if isinstance(rule, dict) and rule.get("triggered")
+    ]
+    if triggered and prediction.predicted_esi is not None and prediction.final_esi is not None:
+        if prediction.final_esi < prediction.predicted_esi:
+            return "Escalated by safety rules"
+    return "Review triggered" if triggered else "No escalation"
+
+
+def _triggered_safety_rules(prediction: Prediction | None) -> list[dict[str, Any]]:
+    if prediction is None:
+        return []
+    return [
+        rule
+        for rule in _json_or_default(prediction.safety_rules_json, [])
+        if isinstance(rule, dict) and rule.get("triggered")
+    ]
+
+
+def _rules_fired_text(prediction: Prediction | None) -> str:
+    triggered = _triggered_safety_rules(prediction)
+    if not triggered:
+        return "None"
+    return "; ".join(
+        _safety_rule_label(rule.get("rule_id")) for rule in triggered
+    )
+
+
+def _top_probability_label(probabilities: dict[str, Any]) -> str | None:
+    parsed: list[tuple[str, float]] = []
+    for label, value in probabilities.items():
+        try:
+            parsed.append((label, float(value)))
+        except (TypeError, ValueError):
+            continue
+    if not parsed:
+        return None
+    return max(parsed, key=lambda item: item[1])[0]
+
+
+def _safety_gate_result_text(prediction: Prediction | None) -> str:
+    if prediction is None:
+        return "Not documented"
+    if _triggered_safety_rules(prediction):
+        if prediction.predicted_esi is not None and prediction.final_esi is not None and prediction.final_esi < prediction.predicted_esi:
+            return f"Escalated from model prediction ESI {prediction.predicted_esi} to final ESI {prediction.final_esi} by safety rules."
+        return "Safety-rule review triggered; final ESI unchanged."
+    return "No safety-rule escalation triggered."
+
+
+def _review_status(clinician_review: ClinicianReview | None) -> str:
+    if clinician_review is None:
+        return "Pending clinician review"
+    return _readable_value(clinician_review.action)
+
+
+def _final_decision_summary(
+    prediction: Prediction | None,
+    clinician_review: ClinicianReview | None,
+) -> str:
+    if prediction is None:
+        return (
+            "No stored model prediction is available. Clinician review is required "
+            "before ESI care routing decisions are used."
+        )
+    if clinician_review is not None and clinician_review.final_esi != prediction.final_esi:
+        return (
+            f"Clinician review changed final routing from ESI {prediction.final_esi} "
+            f"to ESI {clinician_review.final_esi}."
+        )
+    if (
+        prediction.predicted_esi is not None
+        and prediction.final_esi is not None
+        and prediction.final_esi < prediction.predicted_esi
+    ):
+        return (
+            f"Escalated from model prediction ESI {prediction.predicted_esi} "
+            f"to final ESI {prediction.final_esi} by safety rules."
+        )
+    if _triggered_safety_rules(prediction):
+        return "Safety-rule review triggered; final ESI unchanged."
+    return "Model decision confirmed; no safety-rule escalation triggered."
+
+
+def _probability_bar(
+    styles: dict[str, ParagraphStyle],
+    value: Any,
+    width: float = 2.55 * inch,
+    accent: bool = True,
+) -> Table:
+    try:
+        probability = max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        probability = 0.0
+    filled = max(0.01, min(0.99, probability))
+    table = Table(
+        [["", ""]],
+        colWidths=[width * filled, width * (1 - filled)],
+        rowHeights=[0.12 * inch],
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (0, 0), TEAL if accent and probability else colors.HexColor("#94A3B8")),
+                ("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#E2E8F0")),
+                ("BOX", (0, 0), (-1, -1), 0.25, colors.HexColor("#CBD5E1")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    return table
+
+
+def _status_box(
+    styles: dict[str, ParagraphStyle],
+    content_width: float,
+    text: str,
+    background: colors.Color,
+    border: colors.Color,
+) -> Table:
+    table = Table([[Paragraph(_safe(text), styles["value_bold"])]], colWidths=[content_width])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.5, border),
+                ("BACKGROUND", (0, 0), (-1, -1), background),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ]
+        )
+    )
+    return table
+
+
+def _vital_status(vital_name: str, value: Any) -> str:
+    if value is None:
+        return "Not documented"
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "Not documented"
+    if vital_name == "temperature_c":
+        if numeric < 35 or numeric >= 40:
+            return "Critical display range"
+        if numeric < 36 or numeric >= 38:
+            return "Outside display range"
+    if vital_name == "heart_rate":
+        if numeric < 40 or numeric >= 130:
+            return "Critical display range"
+        if numeric < 60 or numeric >= 110:
+            return "Outside display range"
+    if vital_name == "respiratory_rate":
+        if numeric < 8 or numeric >= 30:
+            return "Critical display range"
+        if numeric < 12 or numeric >= 22:
+            return "Outside display range"
+    if vital_name == "oxygen_saturation":
+        if numeric < 92:
+            return "Critical display range"
+        if numeric < 95:
+            return "Outside display range"
+    if vital_name == "pain_score":
+        if numeric >= 8:
+            return "Outside display range"
+    return "Documented"
+
+
+def _blood_pressure_status(assessment: Assessment) -> str:
+    if assessment.systolic_bp is None and assessment.diastolic_bp is None:
+        return "Not documented"
+    if assessment.systolic_bp is not None:
+        if assessment.systolic_bp < 90 or assessment.systolic_bp >= 180:
+            return "Critical display range"
+        if assessment.systolic_bp < 100 or assessment.systolic_bp >= 140:
+            return "Outside display range"
+    if assessment.diastolic_bp is not None and assessment.diastolic_bp >= 110:
+        return "Critical display range"
+    if assessment.diastolic_bp is not None and assessment.diastolic_bp >= 90:
+        return "Outside display range"
+    return "Documented"
 
 
 def _key_value_table(
@@ -563,7 +1281,21 @@ def _key_value_table(
             ]
         )
     table = Table(table_rows, colWidths=[label_width, content_width - label_width])
-    table.setStyle(_table_style(has_header=False))
+    table.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#D7E2EA")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D7E2EA")),
+                ("BACKGROUND", (0, 0), (0, -1), SLATE_SOFT),
+                ("BACKGROUND", (1, 0), (1, -1), colors.white),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
     return table
 
 
@@ -646,7 +1378,7 @@ def _table_style(has_header: bool) -> TableStyle:
     if has_header:
         commands.extend(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8EEF2")),
+                ("BACKGROUND", (0, 0), (-1, 0), NAVY),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFCFD")]),
             ]
         )
@@ -655,12 +1387,21 @@ def _table_style(has_header: bool) -> TableStyle:
     return TableStyle(commands)
 
 
-def _page_number(canvas: Any, document: SimpleDocTemplate) -> None:
+def _footer(canvas: Any, document: SimpleDocTemplate) -> None:
     canvas.saveState()
-    canvas.setFont("Helvetica", 7)
-    canvas.setFillColor(colors.HexColor("#526070"))
-    canvas.drawCentredString(4.25 * inch, 0.35 * inch, REPORT_DISCLAIMER)
-    canvas.drawRightString(7.95 * inch, 0.22 * inch, f"Page {document.page}")
+    footer_y = 0.44 * inch
+    page_width = document.pagesize[0]
+    canvas.setStrokeColor(SLATE_LINE)
+    canvas.setLineWidth(0.4)
+    canvas.line(document.leftMargin, footer_y + 0.18 * inch, page_width - document.rightMargin, footer_y + 0.18 * inch)
+    canvas.setFont("Helvetica", 7.2)
+    canvas.setFillColor(SLATE_MUTED)
+    canvas.drawString(
+        document.leftMargin,
+        footer_y,
+        "This report supports structured triage review, is not diagnosis, and does not replace clinician judgment or emergency protocols.",
+    )
+    canvas.drawRightString(page_width - document.rightMargin, footer_y, f"Page {document.page}")
     canvas.restoreState()
 
 
@@ -681,6 +1422,12 @@ def _details_text(details: Any) -> str:
         lines = _readable_detail_lines(payload)
         return "\n".join(lines) if lines else "Not documented"
     return _display(details)
+
+
+def _short_text(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+    return f"{value[: max_length - 1].rstrip()}..."
 
 
 def _readable_detail_lines(payload: dict[str, Any]) -> list[str]:
@@ -767,6 +1514,10 @@ def _esi(value: int | None) -> str:
     return "Not documented" if value is None else f"ESI {value}"
 
 
+def _esi_badge(value: int | None) -> str:
+    return "Not captured" if value is None else f"ESI {value}"
+
+
 def _percent(value: Any) -> str:
     if value is None:
         return "Not documented"
@@ -774,6 +1525,16 @@ def _percent(value: Any) -> str:
         return f"{float(value) * 100:.1f}%"
     except (TypeError, ValueError):
         return "Not documented"
+
+
+def _latency_ms(prediction: Prediction | None) -> str:
+    latency = getattr(prediction, "latency_ms", None)
+    if latency is None:
+        return "Not captured"
+    try:
+        return f"{int(latency)} ms"
+    except (TypeError, ValueError):
+        return "Not captured"
 
 
 def _unit(value: Any, unit: str) -> str:

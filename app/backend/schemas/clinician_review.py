@@ -47,9 +47,17 @@ class ClinicianReviewResponse(BaseModel):
     assessment_id: str
     clinician_decision: str
     clinician_final_esi: int | None = Field(default=None, ge=1, le=5)
+    final_esi: int | None = Field(default=None, ge=1, le=5)
     review_note: str | None = None
     status: str
+    review_status: str | None = None
+    review_status_normalized: str | None = None
+    review_status_raw: str | None = None
+    reviewer: str | None = None
+    reviewer_role: str | None = None
     reviewed: bool
+    reviewed_at: datetime | None = None
+    audit_event_created: bool = False
     message: str
     is_placeholder: bool
     timestamp: datetime | None = None

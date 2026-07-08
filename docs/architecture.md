@@ -72,18 +72,21 @@ No frontend UI is implemented in Phase 3.
 
 ## ML Pipeline
 
-Training stays outside FastAPI in `ml/training` and notebooks. The backend only
-loads saved artifacts from `model_artifacts/`:
+Training stays outside FastAPI in `ml/training` and notebooks. The backend uses
+`model_registry/esi_345_lightgbm_v2` as the final runtime source of truth:
 
-- `esi_345_lightgbm_v2_threshold.txt`
-- `thresholds.json`
-- `feature_schema.json`
-- `model_metadata.json`
+- `esi_345_lightgbm_v2_model.txt`
+- `esi_345_lightgbm_v2_preprocessing_artifacts.joblib`
+- `esi_345_lightgbm_v2_feature_list.json`
+- `esi_345_lightgbm_v2_threshold_config.json`
+- `esi_345_deployment_config.json`
+- `esi_345_label_mapping.json`
 
-The selected staging model is LightGBM V2 Weight + Threshold. V3 files are kept
-as comparison/reference artifacts only. Missing runtime support never crashes
-startup or `/predict`; it produces a clear placeholder response with
-`model_loaded: false`.
+The selected model is LightGBM V2 Weight + Threshold
+(`lightgbm_v2_weight_threshold_esi345`). The backup registry folder and legacy
+`model_artifacts/` files are not used as the primary runtime source. Missing
+runtime support never crashes startup or `/predict`; it produces a clear
+placeholder response with `model_loaded: false`.
 
 ## Deployment
 

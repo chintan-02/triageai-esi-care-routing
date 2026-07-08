@@ -1,5 +1,6 @@
 """Small repository helpers for database-backed API routes."""
 
+import copy
 import json
 from typing import Any
 
@@ -21,7 +22,12 @@ from app.backend.schemas.report import ReportRequest
 
 
 def create_patient_from_intake(db: Session, intake: PatientIntakeRequest) -> Patient:
-    patient = Patient(age=intake.patient_age, sex=intake.sex)
+    patient = Patient(
+        name=intake.patient_name,
+        mrn=intake.mrn,
+        age=intake.patient_age,
+        sex=intake.sex,
+    )
     db.add(patient)
     db.flush()
     return patient
@@ -64,6 +70,11 @@ def list_recent_assessments(db: Session, limit: int = 10) -> list[Assessment]:
     return list(db.scalars(statement).all())
 
 
+def list_assessments(db: Session) -> list[Assessment]:
+    statement = select(Assessment).order_by(Assessment.created_at.desc())
+    return list(db.scalars(statement).all())
+
+
 def create_prediction(
     db: Session,
     assessment_id: str,
@@ -77,6 +88,7 @@ def create_prediction(
         predicted_esi=prediction_response.predicted_esi,
         final_esi=prediction_response.final_esi,
         confidence_score=prediction_response.confidence_score,
+        latency_ms=prediction_response.latency_ms,
         probabilities_json=json.dumps(prediction_response.probabilities),
         safety_rules_json=json.dumps(
             [rule.model_dump() for rule in prediction_response.safety_rules_triggered]
@@ -171,11 +183,12 @@ def create_audit_log(
     action: str,
     details: dict[str, Any] | None,
 ) -> AuditLog:
+    details_snapshot = copy.deepcopy(details) if details is not None else None
     audit_log = AuditLog(
         assessment_id=assessment_id,
         actor_id=actor_id,
         action=action,
-        details_json=json.dumps(details) if details is not None else None,
+        details_json=json.dumps(details_snapshot) if details_snapshot is not None else None,
     )
     db.add(audit_log)
     db.commit()
@@ -215,6 +228,60 @@ def update_report_record(
 
 def get_report_by_id(db: Session, report_id: str) -> Report | None:
     return db.get(Report, report_id)
+
+
+def list_reports_for_assessment(db: Session, assessment_id: str) -> list[Report]:
+    statement = (
+        select(Report)
+        .where(Report.assessment_id == assessment_id)
+        .order_by(Report.created_at.desc())
+    )
+    return list(db.scalars(statement).all())
+
+
+def get_latest_report_for_assessment(db: Session, assessment_id: str) -> Report | None:
+    reports = list_reports_for_assessment(db, assessment_id)
+    return reports[0] if reports else None
+
+
+def get_latest_generated_report_for_assessment(
+    db: Session,
+    assessment_id: str,
+) -> Report | None:
+    statement = (
+        select(Report)
+        .where(
+            Report.assessment_id == assessment_id,
+            Report.report_status == "generated",
+        )
+        .order_by(Report.created_at.desc())
+        .limit(1)
+    )
+    return db.scalars(statement).first()
+
+
+def _patient_name(assessment: Assessment) -> str:
+    name = getattr(assessment.patient, "name", None)
+    return name if isinstance(name, str) and name.strip() else "Unknown patient"
+
+
+def _patient_mrn(assessment: Assessment) -> str:
+    mrn = getattr(assessment.patient, "mrn", None)
+    return mrn if isinstance(mrn, str) and mrn.strip() else "N/A"
+
+
+def _review_status_from_assessment(
+    assessment: Assessment,
+    latest_review: ClinicianReview | None,
+) -> str:
+    if latest_review is not None:
+        if latest_review.action == "override":
+            return "overridden"
+        if latest_review.action == "accept":
+            return "accepted"
+    if assessment.status == "review_completed":
+        return "accepted"
+    return "pending"
 
 
 def get_dashboard_summary(db: Session) -> dict[str, Any]:
@@ -299,10 +366,14 @@ def get_dashboard_summary(db: Session) -> dict[str, Any]:
             {
                 "assessment_id": assessment.id,
                 "patient_id": assessment.patient_id,
+                "patient_name": _patient_name(assessment),
+                "mrn": _patient_mrn(assessment),
                 "patient_age": assessment.patient.age,
                 "sex": assessment.patient.sex,
                 "chief_complaint": assessment.chief_complaint,
                 "status": assessment.status,
+                "review_status": _review_status_from_assessment(assessment, latest_review),
+                "review_status_normalized": _review_status_from_assessment(assessment, latest_review),
                 "created_at": assessment.created_at,
                 "predicted_esi": latest_prediction.predicted_esi if latest_prediction else None,
                 "model_final_esi": latest_prediction.final_esi if latest_prediction else None,
@@ -313,6 +384,7 @@ def get_dashboard_summary(db: Session) -> dict[str, Any]:
                 "confidence_score": (
                     latest_prediction.confidence_score if latest_prediction else None
                 ),
+                "latency_ms": latest_prediction.latency_ms if latest_prediction else None,
             }
         )
 

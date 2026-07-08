@@ -22,10 +22,13 @@ class ESIPredictionResponse(BaseModel):
     assessment_id: str | None = None
     acuity_scale: Literal["ESI"] = "ESI"
     model_version: str | None = None
+    model_name: str | None = None
+    selected_calibration_method: str | None = None
     model_loaded: bool
     predicted_esi: int | None = Field(default=None, ge=1, le=5)
     final_esi: int | None = Field(default=None, ge=1, le=5)
     confidence_score: float | None = Field(default=None, ge=0, le=1)
+    latency_ms: int | None = Field(default=None, ge=0)
     probabilities: dict[str, float]
     safety_rules_triggered: list[SafetyRuleResult]
     final_source: str
@@ -34,3 +37,4 @@ class ESIPredictionResponse(BaseModel):
     clinician_summary: str
     is_placeholder: bool
     disclaimer: str
+    probability_note: str | None = None

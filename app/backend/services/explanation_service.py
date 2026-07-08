@@ -1,6 +1,7 @@
 """Prediction explanation placeholder service."""
 
 from app.backend.schemas.prediction import SafetyRuleResult
+from app.backend.services.text_formatting import clean_human_readable_text
 
 
 def build_placeholder_explanation() -> str:
@@ -47,4 +48,4 @@ def build_prediction_explanation(
         "This is decision-support output only and is not a diagnosis or a substitute "
         "for clinician judgment; clinician review is required."
     )
-    return " ".join(parts)
+    return clean_human_readable_text(" ".join(parts)) or ""

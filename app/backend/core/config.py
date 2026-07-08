@@ -10,11 +10,27 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    MODEL_PATH: str = "model_artifacts/esi_345_lightgbm_v2_threshold.txt"
-    PREPROCESSOR_PATH: str = ""
-    THRESHOLDS_PATH: str = "model_artifacts/thresholds.json"
-    FEATURE_SCHEMA_PATH: str = "model_artifacts/feature_schema.json"
-    MODEL_METADATA_PATH: str = "model_artifacts/model_metadata.json"
+    MODEL_REGISTRY_DIR: str = "model_registry/esi_345_lightgbm_v2"
+    MODEL_DEPLOYMENT_CONFIG: str = (
+        "model_registry/esi_345_lightgbm_v2/esi_345_deployment_config.json"
+    )
+    MODEL_PATH: str = "model_registry/esi_345_lightgbm_v2/esi_345_lightgbm_v2_model.txt"
+    PREPROCESSOR_PATH: str = (
+        "model_registry/esi_345_lightgbm_v2/"
+        "esi_345_lightgbm_v2_preprocessing_artifacts.joblib"
+    )
+    THRESHOLDS_PATH: str = (
+        "model_registry/esi_345_lightgbm_v2/"
+        "esi_345_lightgbm_v2_threshold_config.json"
+    )
+    FEATURE_SCHEMA_PATH: str = (
+        "model_registry/esi_345_lightgbm_v2/"
+        "esi_345_lightgbm_v2_feature_list.json"
+    )
+    MODEL_METADATA_PATH: str = (
+        "model_registry/esi_345_lightgbm_v2/esi_345_deployment_config.json"
+    )
+    LABEL_MAPPING_PATH: str = "model_registry/esi_345_lightgbm_v2/esi_345_label_mapping.json"
     REPORT_OUTPUT_DIR: str = "reports/generated"
     AZURE_SPEECH_KEY: str = ""
     AZURE_SPEECH_REGION: str = ""

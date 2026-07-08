@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY app ./app
 COPY ml ./ml
-COPY model_artifacts ./model_artifacts
+COPY model_registry ./model_registry
 COPY scripts ./scripts
 COPY pyproject.toml README.md ./
 

@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 
 
 class PatientIntakeRequest(BaseModel):
+    patient_name: str | None = None
+    mrn: str | None = None
     patient_age: int = Field(..., ge=0, le=120)
     sex: str | None = None
     chief_complaint: str = Field(..., min_length=3)

@@ -30,6 +30,8 @@ class Patient(Base):
     __tablename__ = "patients"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    mrn: Mapped[str | None] = mapped_column(String, nullable=True)
     age: Mapped[int] = mapped_column(Integer, nullable=False)
     sex: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -93,6 +95,7 @@ class Prediction(Base):
     predicted_esi: Mapped[int | None] = mapped_column(Integer, nullable=True)
     final_esi: Mapped[int | None] = mapped_column(Integer, nullable=True)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     probabilities_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     safety_rules_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     final_source: Mapped[str] = mapped_column(String, nullable=False)

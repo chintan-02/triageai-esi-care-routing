@@ -82,3 +82,4 @@ def test_dashboard_summary_counts_predictions_and_override_review() -> None:
     assert recent["clinician_decision"] == "override"
     assert recent["clinician_final_esi"] == 2
     assert recent["final_source"] == "clinician_override"
+    assert recent["latency_ms"] == predict_response.json()["latency_ms"]
