@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2, Download, RotateCcw, ShieldAlert } from 'lucide-react';
-import { useAssessmentsStore } from '@/context/AssessmentsContext';
+import { downloadAssessmentPdf, getAssessment } from '@/api/assessments';
+import { submitClinicianReview } from '@/api/reviews';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import type { ClinicianReview, EsiLevel, RuleHit } from '@/types/clinical';
+import type { AssessmentDetail } from '@/types/api';
+import type { AssessmentRecord, AuditEvent, ClinicianReview, EsiLevel, PatientProfile, ReviewStatus, RiskSeverity, RuleHit, Vitals } from '@/types/clinical';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
@@ -18,7 +20,6 @@ import { RiskRuleList } from '@/components/clinical/RiskRuleList';
 import { VitalsGrid } from '@/components/clinical/VitalsGrid';
 import { formatDateTime, formatPercent } from '@/lib/formatters';
 import { hasPermission } from '@/lib/permissions';
-import { generateAssessmentPdf } from '@/lib/reportPdf';
 
 function FinalDecisionBanner({ predicted, final, confidence, latency, status, rules }: { predicted: EsiLevel; final: EsiLevel; confidence: number; latency: number; status: ClinicianReview['status']; rules: RuleHit[] }) {
   const escalated = final < predicted;
@@ -100,14 +101,181 @@ function pendingNote(note: string) {
   return note.trim().toLowerCase().startsWith('awaiting clinician review');
 }
 
+function isEsiLevel(value: unknown): value is EsiLevel {
+  return typeof value === 'number' && [1, 2, 3, 4, 5].includes(value);
+}
+
+function esiLevelOrFallback(value: unknown, fallback: EsiLevel): EsiLevel {
+  return isEsiLevel(value) ? value : fallback;
+}
+
+function numberOrZero(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function textOrFallback(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function normalizeSex(value: unknown): PatientProfile['sex'] {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'female') return 'Female';
+  if (normalized === 'male') return 'Male';
+  if (normalized === 'other') return 'Other';
+  return 'Unknown';
+}
+
+function normalizeArrivalMode(value: unknown): PatientProfile['arrivalMode'] {
+  if (value === 'Walk-in' || value === 'Ambulance' || value === 'Referral' || value === 'Other') return value;
+  return 'Other';
+}
+
+function normalizeReviewStatus(value: unknown): ReviewStatus {
+  if (value === 'accepted' || value === 'overridden') return value;
+  return 'pending';
+}
+
+function normalizeReviewerRole(value: unknown): ClinicianReview['role'] {
+  if (value === 'Nurse' || value === 'Doctor' || value === 'Admin' || value === 'Demo Clinician') return value;
+  return 'Nurse';
+}
+
+function normalizeProbabilities(probabilities: Record<string, number> | undefined): Record<string, number> {
+  if (!probabilities) return {};
+  return Object.fromEntries(
+    Object.entries(probabilities).map(([key, value]) => [key.replace('_', ' '), value])
+  );
+}
+
+function detailsToText(details: unknown): string {
+  if (!details) return 'No additional details.';
+  if (typeof details === 'string') return details;
+  try {
+    return JSON.stringify(details);
+  } catch {
+    return 'Backend audit event details could not be serialized.';
+  }
+}
+
+function severityFromRule(rule: Record<string, unknown>, safetyEscalated: boolean): RiskSeverity {
+  const severity = rule.severity;
+  if (severity === 'low' || severity === 'moderate' || severity === 'high' || severity === 'critical') return severity;
+  return safetyEscalated ? 'high' : 'moderate';
+}
+
+function mapRuleHits(detail: AssessmentDetail): RuleHit[] {
+  const rules = detail.latest_prediction?.safety_rules_triggered ?? [];
+  return rules
+    .filter((rule) => rule.triggered !== false)
+    .map((rule, index) => {
+      const ruleId = textOrFallback(rule.rule_id, `safety_rule_${index + 1}`);
+      const message = textOrFallback(rule.message, 'Safety rule triggered by backend decision-support.');
+      const escalatesTo = esiLevelOrFallback(rule.escalates_to, detail.final_esi ?? 3);
+      return {
+        id: ruleId,
+        label: message,
+        description: message,
+        severity: severityFromRule(rule, detail.safety_escalated),
+        escalatesTo: detail.safety_escalated ? escalatesTo : undefined
+      };
+    });
+}
+
+function mapAuditTrail(detail: AssessmentDetail): AuditEvent[] {
+  return detail.audit_trail.map((event) => ({
+    id: event.audit_id,
+    timestamp: textOrFallback(event.timestamp ?? event.created_at, detail.created_at ?? new Date().toISOString()),
+    actor: textOrFallback(event.actor ?? event.actor_id, 'Backend API'),
+    action: event.action.replace(/_/g, ' '),
+    details: event.message ?? detailsToText(event.details),
+    severity: event.action.toLowerCase().includes('override') ? 'warning' : 'info'
+  }));
+}
+
+function modelFamilyFromVersion(version: string): string {
+  return version.toLowerCase().includes('lightgbm') ? 'LightGBM' : 'Backend model';
+}
+
+function mapBackendAssessment(detail: AssessmentDetail): AssessmentRecord {
+  const latestPrediction = detail.latest_prediction;
+  const latestReview = detail.latest_clinician_review;
+  const predictedEsi = esiLevelOrFallback(latestPrediction?.predicted_esi ?? detail.model_predicted_esi, 3);
+  const finalEsi = esiLevelOrFallback(latestPrediction?.final_esi ?? detail.final_esi, predictedEsi);
+  const age = numberOrZero(detail.age ?? detail.intake?.patient_age);
+  const modelVersion = textOrFallback(latestPrediction?.model_version ?? detail.model_version, 'Backend model version unavailable');
+
+  return {
+    id: detail.assessment_id,
+    intake: {
+      patient: {
+        id: textOrFallback(detail.patient_id, detail.assessment_id),
+        mrn: textOrFallback(detail.mrn, 'N/A'),
+        name: textOrFallback(detail.patient_name, 'Unknown patient'),
+        age,
+        sex: normalizeSex(detail.sex ?? detail.intake?.sex),
+        arrivalMode: normalizeArrivalMode(detail.arrival_mode ?? detail.intake?.arrival_mode)
+      },
+      chiefComplaint: textOrFallback(detail.chief_complaint ?? detail.intake?.chief_complaint, 'Chief complaint unavailable'),
+      symptomText: textOrFallback(detail.symptom_narrative ?? detail.additional_context ?? detail.intake?.additional_context, 'No symptom narrative entered.'),
+      duration: textOrFallback(detail.symptom_duration ?? detail.intake?.symptom_duration, 'Not entered'),
+      vitals: {
+        heartRate: numberOrZero(detail.heart_rate ?? detail.intake?.heart_rate),
+        respiratoryRate: numberOrZero(detail.respiratory_rate ?? detail.intake?.respiratory_rate),
+        systolicBp: numberOrZero(detail.systolic_bp ?? detail.intake?.systolic_bp),
+        diastolicBp: numberOrZero(detail.diastolic_bp ?? detail.intake?.diastolic_bp),
+        temperatureC: numberOrZero(detail.temperature_c ?? detail.intake?.temperature_c),
+        spo2: numberOrZero(detail.oxygen_saturation ?? detail.intake?.oxygen_saturation),
+        painScore: numberOrZero(detail.pain_score ?? detail.intake?.pain_score)
+      } satisfies Vitals,
+      riskFlags: detail.risk_flags,
+      comorbidities: detail.comorbidities
+    },
+    prediction: {
+      requestId: textOrFallback(detail.request_id_value ?? detail.request_id, detail.assessment_id),
+      modelVersion,
+      modelFamily: modelFamilyFromVersion(modelVersion),
+      predictedEsi,
+      finalEsi,
+      confidence: numberOrZero(latestPrediction?.confidence_score ?? detail.confidence_score ?? detail.confidence),
+      latencyMs: numberOrZero(detail.latency_ms),
+      probabilities: normalizeProbabilities(latestPrediction?.probabilities ?? detail.probabilities),
+      thresholdProfile: textOrFallback(latestPrediction?.final_source, 'Backend final decision'),
+      ruleHits: mapRuleHits(detail),
+      explanation: textOrFallback(latestPrediction?.explanation, detail.message),
+      recommendation: textOrFallback(latestPrediction?.recommendation, 'Clinician review is required.'),
+      createdAt: textOrFallback(latestPrediction?.created_at, detail.created_at ?? new Date().toISOString())
+    },
+    review: {
+      status: normalizeReviewStatus(detail.review_status_normalized ?? detail.review_status ?? latestReview?.clinician_decision),
+      reviewer: textOrFallback(detail.reviewer ?? latestReview?.clinician_id, 'Unassigned'),
+      role: normalizeReviewerRole(detail.reviewer_role),
+      finalDecision: esiLevelOrFallback(latestReview?.clinician_final_esi ?? detail.final_esi, finalEsi),
+      note: textOrFallback(latestReview?.review_note ?? latestReview?.override_reason, 'Awaiting clinician review.'),
+      reviewedAt: latestReview?.created_at ?? undefined
+    },
+    auditTrail: mapAuditTrail(detail)
+  };
+}
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function AssessmentDetailPage() {
   const { id } = useParams();
-  const { records, isLoading, saveReview } = useAssessmentsStore();
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const record = records.find((r) => r.id === id);
-
+  const [record, setRecord] = useState<AssessmentRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [finalDecision, setFinalDecision] = useState<EsiLevel>(3);
   const [isSaving, setIsSaving] = useState(false);
@@ -116,21 +284,73 @@ export function AssessmentDetailPage() {
   const canOverride = hasPermission(user?.role, 'review:override');
   const canDownloadReport = hasPermission(user?.role, 'report:generate');
 
-  useEffect(() => {
-    if (record) {
-      setReviewNote(record.review.note);
-      setFinalDecision(record.review.finalDecision);
+  const loadAssessment = useCallback(async () => {
+    if (!id) {
+      setRecord(null);
+      setLoadError('Missing assessment ID in the route.');
+      setIsLoading(false);
+      return;
     }
+
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const detail = await getAssessment(id);
+      setRecord(mapBackendAssessment(detail));
+    } catch (error) {
+      setRecord(null);
+      setLoadError(error instanceof Error ? error.message : 'Unable to load this backend assessment.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void loadAssessment();
+  }, [loadAssessment]);
+
+  useEffect(() => {
+    if (!record) return;
+    setReviewNote(record.review.note);
+    setFinalDecision(record.review.finalDecision);
   }, [record]);
 
   const overrideLocked = useMemo(() => !canOverride, [canOverride]);
 
+  if (isLoading) {
+    return (
+      <Card className="p-8 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+          <RotateCcw size={26} className="animate-spin" />
+        </div>
+        <h2 className="font-display mt-4 text-lg font-bold text-slate-950">Loading assessment</h2>
+        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">Fetching the assessment from the FastAPI backend.</p>
+      </Card>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <EmptyState
+        title="Assessment unavailable"
+        description={loadError}
+        action={
+          <div className="flex gap-3">
+            <Button onClick={loadAssessment}>Try again</Button>
+            <Link to="/assessments">
+              <Button variant="secondary">Back to Assessments</Button>
+            </Link>
+          </div>
+        }
+      />
+    );
+  }
+
   if (!record) {
-    if (isLoading) return null;
     return (
       <EmptyState
         title="Assessment not found"
-        description="The selected assessment could not be loaded from the current API/mock store."
+        description="The selected assessment could not be loaded from the backend database."
         action={
           <Link to="/assessments">
             <Button>Back to Assessments</Button>
@@ -173,13 +393,15 @@ export function AssessmentDetailPage() {
 
       const savedFinalDecision = effectiveStatus === 'accepted' ? safetyFinalDecision : selectedFinalDecision;
       const note = effectiveStatus === 'accepted' ? 'Current final routing decision accepted.' : overrideReason;
-      await saveReview(record.id, {
-        status: effectiveStatus,
-        reviewer: actingReviewer,
-        role: user?.role ?? 'Nurse',
-        finalDecision: savedFinalDecision,
-        note
+      await submitClinicianReview({
+        assessment_id: record.id,
+        clinician_id: actingReviewer,
+        action: effectiveStatus === 'overridden' ? 'override' : 'accept',
+        final_esi: savedFinalDecision,
+        override_reason: effectiveStatus === 'overridden' ? note : null,
+        notes: note
       });
+      await loadAssessment();
       showToast({
         tone: 'success',
         title: effectiveStatus === 'accepted' ? 'Decision accepted' : 'Decision overridden',
@@ -197,7 +419,8 @@ export function AssessmentDetailPage() {
       showToast({ tone: 'error', title: 'Permission required', description: 'Your role cannot generate clinical reports.' });
       return;
     }
-    await generateAssessmentPdf(record);
+    const blob = await downloadAssessmentPdf(record.id);
+    saveBlob(blob, `${record.id}_triageai_report.pdf`);
     showToast({ tone: 'info', title: 'PDF generated', description: `${record.id}_triageai_report.pdf downloaded.` });
   };
 
