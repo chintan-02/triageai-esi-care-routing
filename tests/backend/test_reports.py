@@ -87,6 +87,31 @@ def test_download_generated_report_returns_pdf() -> None:
     assert len(download_response.content) > 500
 
 
+def test_assessment_pdf_download_reuses_existing_report_without_duplicate_audit() -> None:
+    predict_response = client.post("/predict", json=valid_intake_payload())
+    assessment_id = predict_response.json()["assessment_id"]
+
+    first_response = client.get(f"/assessments/{assessment_id}/report/pdf")
+    second_response = client.get(f"/assessments/{assessment_id}/report/pdf")
+
+    assert first_response.status_code == 200
+    assert first_response.headers["content-type"] == "application/pdf"
+    assert first_response.content.startswith(b"%PDF")
+    assert second_response.status_code == 200
+    assert second_response.headers["content-type"] == "application/pdf"
+    assert second_response.content.startswith(b"%PDF")
+
+    detail_response = client.get(f"/assessments/{assessment_id}")
+    detail = detail_response.json()
+    report_actions = [
+        event["action"]
+        for event in detail["audit_trail"]
+        if event["action"] == "report_generated"
+    ]
+    assert len(report_actions) == 1
+    assert len(detail["report_ids"]) == 1
+
+
 def test_generate_report_for_unknown_assessment_returns_404() -> None:
     response = client.post(
         "/reports/generate",

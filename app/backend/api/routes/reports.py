@@ -107,10 +107,24 @@ def get_or_generate_assessment_report_pdf(
     if assessment is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
 
-    report_record = repositories.create_report_record(
+    report_record = repositories.get_latest_generated_report_for_assessment(
         db,
-        ReportRequest(assessment_id=assessment_id, include_audit=True),
+        assessment_id,
     )
+    if report_record is not None:
+        pdf_path = report_file_path(settings.REPORT_OUTPUT_DIR, report_record.id)
+        if pdf_path.exists() and pdf_path.is_file():
+            return FileResponse(
+                path=pdf_path,
+                filename=report_file_name(report_record.id),
+                media_type="application/pdf",
+            )
+    else:
+        report_record = repositories.create_report_record(
+            db,
+            ReportRequest(assessment_id=assessment_id, include_audit=True),
+        )
+
     latest_prediction = repositories.get_latest_prediction_for_assessment(db, assessment_id)
     latest_review = repositories.get_latest_clinician_review_for_assessment(db, assessment_id)
     audit_logs = repositories.list_audit_logs_for_assessment(db, assessment_id)
@@ -123,6 +137,12 @@ def get_or_generate_assessment_report_pdf(
         output_dir=settings.REPORT_OUTPUT_DIR,
         include_audit=True,
     )
+    action = "report_regenerated" if report_record.report_status == "generated" else "report_generated"
+    message = (
+        "PDF report regenerated."
+        if action == "report_regenerated"
+        else "PDF report generated."
+    )
     repositories.update_report_record(
         db,
         report_id=report_record.id,
@@ -133,11 +153,12 @@ def get_or_generate_assessment_report_pdf(
         db=db,
         assessment_id=assessment_id,
         actor_id=None,
-        action="report_generated",
+        action=action,
         details={
             "report_id": report_record.id,
             "report_status": "generated",
             "download_url": f"/reports/{report_record.id}/download",
+            "message": message,
         },
     )
 

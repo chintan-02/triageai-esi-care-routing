@@ -243,6 +243,22 @@ def get_latest_report_for_assessment(db: Session, assessment_id: str) -> Report 
     return reports[0] if reports else None
 
 
+def get_latest_generated_report_for_assessment(
+    db: Session,
+    assessment_id: str,
+) -> Report | None:
+    statement = (
+        select(Report)
+        .where(
+            Report.assessment_id == assessment_id,
+            Report.report_status == "generated",
+        )
+        .order_by(Report.created_at.desc())
+        .limit(1)
+    )
+    return db.scalars(statement).first()
+
+
 def _patient_name(assessment: Assessment) -> str:
     name = getattr(assessment.patient, "name", None)
     return name if isinstance(name, str) and name.strip() else "Unknown patient"
