@@ -1,3 +1,6 @@
+// Synthetic fixtures for tests and explicit mock-mode UI development only.
+// Real assessments, dashboard summaries, audit trails, and official reports
+// come from the backend/database in normal app runtime.
 import type {
   AssessmentRecord,
   AuditEvent,

@@ -224,6 +224,10 @@ def list_assessments(db: Session = Depends(get_db)) -> list[AssessmentListItem]:
                 reviewer_role=None,
                 created_at=assessment.created_at,
                 updated_at=assessment.updated_at,
+                report_ids=[
+                    report.id
+                    for report in repositories.list_reports_for_assessment(db, assessment.id)
+                ],
             )
         )
     return items

@@ -1,4 +1,7 @@
 import type jsPDFType from 'jspdf';
+// Legacy browser-side PDF helper retained for mock-mode experiments only.
+// Official clinical report generation uses the backend endpoint:
+// GET /assessments/{assessment_id}/report/pdf.
 import type { AssessmentRecord, AuditEvent, ClinicianReview, EsiLevel } from '@/types/clinical';
 import { formatDateTime, formatPercent } from '@/lib/formatters';
 import { vitalFlag, vitalStatusLabel, type VitalKey } from '@/lib/vitals';

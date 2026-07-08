@@ -3,7 +3,6 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RoleRoute } from '@/components/RoleRoute';
-import { AssessmentsProvider } from '@/context/AssessmentsContext';
 import { ModelStatusProvider } from '@/context/ModelStatusContext';
 import { SkeletonStatRow } from '@/components/ui/Skeleton';
 import { useAuth } from '@/context/AuthContext';
@@ -21,9 +20,7 @@ const SettingsPage = lazy(() => import('@/features/model/pages/SettingsPage').th
 function DataScope() {
   return (
     <ModelStatusProvider>
-      <AssessmentsProvider>
-        <Outlet />
-      </AssessmentsProvider>
+      <Outlet />
     </ModelStatusProvider>
   );
 }

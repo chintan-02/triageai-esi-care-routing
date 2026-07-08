@@ -2,22 +2,10 @@ import type { AssessmentRecord, ClinicianReview, DashboardSummary, IntakePayload
 import { API_BASE_URL, USE_MOCK_API, getRuntimeWarnings } from '@/lib/env';
 import { mockApi } from './mockApi';
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options?.headers ?? {})
-    },
-    credentials: 'include',
-    ...options
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
+function legacyClientDisabled(): never {
+  throw new Error(
+    'Legacy mock apiClient is disabled in backend-connected mode. Use the current backend API modules in src/api/*.ts.',
+  );
 }
 
 export const apiClient = {
@@ -35,37 +23,35 @@ export const apiClient = {
 
   getDashboardSummary(): Promise<DashboardSummary> {
     if (USE_MOCK_API) return mockApi.getDashboardSummary();
-    return request<DashboardSummary>('/api/v1/dashboard/summary');
+    return Promise.reject(legacyClientDisabled());
   },
 
   getModelStatus(): Promise<ModelStatusResponse> {
     if (USE_MOCK_API) return mockApi.getModelStatus();
-    return request<ModelStatusResponse>('/api/v1/model/status');
+    return Promise.reject(legacyClientDisabled());
   },
 
   listAssessments(): Promise<AssessmentRecord[]> {
     if (USE_MOCK_API) return mockApi.listAssessments();
-    return request<AssessmentRecord[]>('/api/v1/assessments');
+    return Promise.reject(legacyClientDisabled());
   },
 
   getAssessment(id: string): Promise<AssessmentRecord | undefined> {
     if (USE_MOCK_API) return mockApi.getAssessment(id);
-    return request<AssessmentRecord>(`/api/v1/assessments/${id}`);
+    void id;
+    return Promise.reject(legacyClientDisabled());
   },
 
   createAssessment(payload: IntakePayload): Promise<AssessmentRecord> {
     if (USE_MOCK_API) return mockApi.createAssessment(payload);
-    return request<AssessmentRecord>('/api/v1/assessments', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
+    void payload;
+    return Promise.reject(legacyClientDisabled());
   },
 
   saveReview(id: string, review: ClinicianReview): Promise<AssessmentRecord | undefined> {
     if (USE_MOCK_API) return mockApi.saveReview(id, review);
-    return request<AssessmentRecord>(`/api/v1/assessments/${id}/review`, {
-      method: 'POST',
-      body: JSON.stringify(review)
-    });
+    void id;
+    void review;
+    return Promise.reject(legacyClientDisabled());
   }
 };

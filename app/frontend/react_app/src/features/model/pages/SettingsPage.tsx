@@ -1,17 +1,17 @@
 import { AlertTriangle, Database, LockKeyhole, PlugZap, ServerCog, type LucideIcon } from 'lucide-react';
-import { apiClient } from '@/api/apiClient';
 import { useAuth } from '@/context/AuthContext';
 import { useModelStatus } from '@/context/ModelStatusContext';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { API_BASE_URL, USE_MOCK_API, getRuntimeWarnings } from '@/lib/env';
 import { roleSummary } from '@/lib/permissions';
 
 const checklist: Array<{ icon: LucideIcon; title: string; description: string }> = [
-  { icon: ServerCog, title: 'Assessment adapter endpoints', description: 'GET /api/v1/assessments, POST /api/v1/assessments, POST /api/v1/assessments/{id}/review' },
-  { icon: PlugZap, title: 'Prediction adapter', description: 'Adapter calls your existing /predict service internally, applies the safety gate, saves audit data, then returns AssessmentRecord.' },
-  { icon: Database, title: 'Model status endpoint', description: 'GET /api/v1/model/status returns final notebook metrics, threshold, feature count, calibration decision, and artifact-check status.' },
-  { icon: LockKeyhole, title: 'RBAC/auth', description: 'FastAPI JWT or secure httpOnly session auth for Admin, Doctor, and Nurse permissions.' }
+  { icon: ServerCog, title: 'Assessment endpoints', description: 'GET /assessments, GET /assessments/{id}, and POST /predict persist backend assessment data.' },
+  { icon: PlugZap, title: 'Prediction service', description: 'POST /predict runs the backend LightGBM V2 decision-support workflow and stores audit-ready records.' },
+  { icon: Database, title: 'Readiness and dashboard', description: 'GET /ready and GET /dashboard/summary report backend/database/model state from the source of truth.' },
+  { icon: LockKeyhole, title: 'RBAC/auth', description: 'Local auth is development-only. Production should use FastAPI JWT or secure httpOnly session auth for Admin, Doctor, and Nurse permissions.' }
 ];
 
 const warningTone = {
@@ -22,8 +22,8 @@ const warningTone = {
 
 export function SettingsPage() {
   const { user } = useAuth();
-  const { status } = useModelStatus();
-  const activeModel = status?.activeModel;
+  const { readiness } = useModelStatus();
+  const runtimeWarnings = getRuntimeWarnings();
 
   return (
     <div>
@@ -39,8 +39,8 @@ export function SettingsPage() {
           <CardBody className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current API mode</p>
-              <div className="mt-2"><Badge className="border-blue-200 bg-blue-50 text-blue-800">{apiClient.mode}</Badge></div>
-              <p className="font-data mt-2 text-xs font-semibold text-slate-500">Base URL: {apiClient.baseUrl}</p>
+              <div className="mt-2"><Badge className="border-blue-200 bg-blue-50 text-blue-800">{USE_MOCK_API ? 'development mock' : 'backend connected'}</Badge></div>
+              <p className="font-data mt-2 text-xs font-semibold text-slate-500">Base URL: {API_BASE_URL}</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Signed in as</p>
@@ -49,7 +49,7 @@ export function SettingsPage() {
               {user ? <p className="mt-2 text-xs leading-5 text-slate-500">{roleSummary(user.role)}</p> : null}
             </div>
             <div className="space-y-2">
-              {apiClient.runtimeWarnings.map((warning) => (
+              {runtimeWarnings.map((warning) => (
                 <div key={warning.id} className={`rounded-2xl border p-4 text-sm leading-6 ${warningTone[warning.severity]}`}>
                   <div className="flex gap-2 font-bold"><AlertTriangle size={17} /> {warning.title}</div>
                   <p className="mt-1">{warning.detail}</p>
@@ -57,9 +57,9 @@ export function SettingsPage() {
               ))}
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
-              Use <code className="rounded bg-slate-100 px-1.5 py-1 text-xs font-bold">VITE_USE_MOCK_API=false</code>,{' '}
-              <code className="rounded bg-slate-100 px-1.5 py-1 text-xs font-bold">VITE_USE_MOCK_AUTH=false</code>, and{' '}
-              <code className="rounded bg-slate-100 px-1.5 py-1 text-xs font-bold">VITE_API_BASE_URL=http://localhost:8000</code> when the backend adapter and auth routes are ready.
+              Backend-connected data mode is the default. Use{' '}
+              <code className="rounded bg-slate-100 px-1.5 py-1 text-xs font-bold">VITE_API_BASE_URL=http://localhost:8001</code> for local FastAPI, and only set{' '}
+              <code className="rounded bg-slate-100 px-1.5 py-1 text-xs font-bold">VITE_USE_MOCK_API=true</code> for isolated UI development with synthetic records.
             </div>
           </CardBody>
         </Card>
@@ -81,17 +81,17 @@ export function SettingsPage() {
       </div>
 
       <Card className="mt-6">
-        <CardHeader title="Final model source of truth" description="Values loaded from the model-status contract, based on the final executed notebook you provided." />
+        <CardHeader title="Final model source of truth" description="Values loaded from backend readiness and the configured model registry." />
         <CardBody className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
-            ['Notebook', activeModel?.sourceNotebook ?? '—'],
-            ['Model', activeModel?.modelDisplayName ?? '—'],
-            ['Threshold', activeModel ? String(activeModel.deploymentThreshold) : '—'],
-            ['Feature Count', activeModel ? String(activeModel.featureCount) : '—'],
-            ['Calibration', activeModel?.calibrationMethod ?? '—'],
-            ['Calibrated deployed', activeModel ? String(activeModel.deployCalibratedProbabilities) : '—'],
-            ['Class Scope', activeModel?.classScope ?? '—'],
-            ['Artifact Check', activeModel?.artifactCheck.status ?? '—']
+            ['Model', readiness?.model_name ?? '—'],
+            ['Model version', readiness?.model_version ?? '—'],
+            ['Model source', readiness?.model_source ?? '—'],
+            ['Feature Count', readiness?.feature_count ? String(readiness.feature_count) : '—'],
+            ['Calibration', readiness?.selected_calibration_method ?? '—'],
+            ['Threshold config', readiness?.threshold_config_loaded ? 'Loaded' : '—'],
+            ['Class Order', readiness?.class_order?.join(', ') ?? '—'],
+            ['Placeholder', readiness ? String(readiness.is_placeholder) : '—']
           ].map(([label, value]) => (
             <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</p>

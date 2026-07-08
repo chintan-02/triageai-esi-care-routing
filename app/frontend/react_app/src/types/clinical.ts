@@ -95,7 +95,7 @@ export interface PredictionResponse {
   latencyMs: number;
   probabilities: Record<string, number>;
   thresholdProfile: string;
-  /** Deprecated compatibility field. Use GET /api/v1/model/status for model-level evaluation metrics. */
+  /** Deprecated compatibility field. Use GET /ready and backend registry metadata for model-level status. */
   metrics?: ModelMetricSnapshot;
   ruleHits: RuleHit[];
   explanation: string;

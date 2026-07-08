@@ -1,6 +1,8 @@
 // This file exports both the provider component and its `useX` hook, which is
 // the standard React context pattern. react-refresh's export-purity rule flags
 // that combination; disabled here rather than splitting one small file in two.
+// Legacy mock-mode provider retained for isolated UI experiments. App.tsx no
+// longer mounts this provider for backend-connected production workflows.
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiClient } from '@/api/apiClient';

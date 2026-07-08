@@ -82,6 +82,7 @@ class AssessmentListItem(BaseModel):
     reviewer_role: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    report_ids: list[str] = Field(default_factory=list)
 
 
 class AssessmentAuditTrailResponse(BaseModel):

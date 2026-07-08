@@ -1,3 +1,6 @@
+// Development-only synthetic API used only when VITE_USE_MOCK_API=true.
+// Production workflows use the backend modules in src/api/*.ts and the
+// database-backed FastAPI service as the source of truth.
 import type { AssessmentRecord, ClinicianReview, DashboardSummary, IntakePayload, ModelStatusResponse } from '@/types/clinical';
 import { activeModelStatus, buildDashboardSummary, mockAssessments, simulatePrediction } from '@/data/mockData';
 

@@ -1,12 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getReady } from '@/api/health';
-import { apiClient } from '@/api/apiClient';
 import type { ReadyResponse } from '@/types/api';
-import type { ModelStatusResponse } from '@/types/clinical';
 
 interface ModelStatusContextValue {
-  status: ModelStatusResponse | null;
   readiness: ReadyResponse | null;
   isLoading: boolean;
   isReadinessLoading: boolean;
@@ -19,24 +16,11 @@ interface ModelStatusContextValue {
 const ModelStatusContext = createContext<ModelStatusContextValue | null>(null);
 
 export function ModelStatusProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<ModelStatusResponse | null>(null);
   const [readiness, setReadiness] = useState<ReadyResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isReadinessLoading, setIsReadinessLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [readinessError, setReadinessError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      setStatus(await apiClient.getModelStatus());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load model status.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
 
   const refreshReadiness = useCallback(async () => {
     setIsReadinessLoading(true);
@@ -51,14 +35,25 @@ export function ModelStatusProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await refreshReadiness();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load backend model readiness.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refreshReadiness]);
+
   useEffect(() => {
     void refresh();
-    void refreshReadiness();
-  }, [refresh, refreshReadiness]);
+  }, [refresh]);
 
   const value = useMemo(
-    () => ({ status, readiness, isLoading, isReadinessLoading, error, readinessError, refresh, refreshReadiness }),
-    [status, readiness, isLoading, isReadinessLoading, error, readinessError, refresh, refreshReadiness]
+    () => ({ readiness, isLoading, isReadinessLoading, error, readinessError, refresh, refreshReadiness }),
+    [readiness, isLoading, isReadinessLoading, error, readinessError, refresh, refreshReadiness]
   );
 
   return <ModelStatusContext.Provider value={value}>{children}</ModelStatusContext.Provider>;
