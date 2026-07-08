@@ -112,7 +112,7 @@ function compactAuditMetadata(item: AssessmentListItem, event?: AssessmentAuditE
   const payload = auditPayload(event?.details);
   const items: Array<{ label: string; value: string } | null> = [
     { label: 'Assessment', value: shortAssessmentId(item.assessment_id) },
-    { label: 'MRN', value: textOrFallback(item.mrn, 'N/A') },
+    { label: 'MRN', value: textOrFallback(item.mrn, '—') },
   ];
 
   const predictedEsi = auditMetadataItem(payload, ['predicted_esi'], 'Predicted ESI');
@@ -144,8 +144,8 @@ function mapBackendAuditEvent(item: AssessmentListItem, event: AssessmentAuditEv
   return {
     id: event.audit_id,
     assessmentId: item.assessment_id,
-    patient: textOrFallback(item.patient_name, 'Unknown patient'),
-    mrn: textOrFallback(item.mrn, 'N/A'),
+    patient: textOrFallback(item.patient_name, '—'),
+    mrn: textOrFallback(item.mrn, '—'),
     actor: textOrFallback(event.actor ?? event.actor_id, 'Backend API'),
     action: auditActionTitle(event.action),
     details: auditMessage(event.action, event.details, event.message),
@@ -167,8 +167,8 @@ function buildReportGeneratedEvent(item: AssessmentListItem): ExtendedEvent | nu
   return {
     id: `${item.assessment_id}-report-generated`,
     assessmentId: item.assessment_id,
-    patient: textOrFallback(item.patient_name, 'Unknown patient'),
-    mrn: textOrFallback(item.mrn, 'N/A'),
+    patient: textOrFallback(item.patient_name, '—'),
+    mrn: textOrFallback(item.mrn, '—'),
     actor: 'Backend API',
     action: 'PDF report generated',
     details: 'PDF report generated.',

@@ -234,7 +234,7 @@ function drawFooter(doc: jsPDFType, pageWidth: number, margin: number) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.text(
-      'This report supports structured triage review and does not replace clinician judgment, diagnosis, or emergency protocols.',
+      'This report supports structured triage review, is not diagnosis, and does not replace clinician judgment or emergency protocols.',
       margin,
       footerY,
       { maxWidth: pageWidth - margin * 2 - 70 }

@@ -56,12 +56,12 @@ function normalizeReviewStatus(item: AssessmentListItem): ReviewStatus {
 function mapAssessmentRow(item: AssessmentListItem): AssessmentRow {
   return {
     id: item.assessment_id,
-    patientName: textOrFallback(item.patient_name, 'Unknown patient'),
-    mrn: textOrFallback(item.mrn, 'N/A'),
+    patientName: textOrFallback(item.patient_name, '—'),
+    mrn: textOrFallback(item.mrn, '—'),
     age: typeof item.age === 'number' ? item.age : null,
-    sex: textOrFallback(item.sex, 'Unknown'),
-    chiefComplaint: textOrFallback(item.chief_complaint, 'Not documented'),
-    modelVersion: textOrFallback(item.model_version, 'N/A'),
+    sex: textOrFallback(item.sex, '—'),
+    chiefComplaint: textOrFallback(item.chief_complaint, '—'),
+    modelVersion: textOrFallback(item.model_version, '—'),
     predictedEsi: isEsiLevel(item.model_predicted_esi) ? item.model_predicted_esi : null,
     finalEsi: isEsiLevel(item.final_esi) ? item.final_esi : null,
     confidence: typeof item.confidence_score === 'number' ? item.confidence_score : null,
@@ -72,12 +72,12 @@ function mapAssessmentRow(item: AssessmentListItem): AssessmentRow {
 }
 
 function EsiCell({ level, prefix }: { level: EsiLevel | null; prefix?: string }) {
-  if (!level) return <span className="text-xs font-semibold text-slate-500">N/A</span>;
+  if (!level) return <span className="text-xs font-semibold text-slate-500">—</span>;
   return <EsiBadge level={level} prefix={prefix} />;
 }
 
 function formatAgeSexMrn(row: AssessmentRow): string {
-  const age = row.age === null ? 'Age N/A' : String(row.age);
+  const age = row.age === null ? 'Age —' : String(row.age);
   return `${age} • ${row.sex} • ${row.mrn}`;
 }
 
@@ -243,7 +243,7 @@ export function AssessmentsPage() {
                       <Link to={`/assessments/${record.id}`} className="font-data font-bold text-clinical-blue hover:text-blue-800">
                         <span title={record.id}>{shortAssessmentId(record.id)}</span>
                       </Link>
-                      <p className="text-xs text-slate-500">{record.createdAt ? formatDateTime(record.createdAt) : 'N/A'}</p>
+                      <p className="text-xs text-slate-500">{record.createdAt ? formatDateTime(record.createdAt) : '—'}</p>
                     </td>
                     <td className="px-5 py-4">
                       <p className="font-bold leading-5 text-slate-950">{record.patientName}</p>

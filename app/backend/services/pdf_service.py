@@ -559,8 +559,8 @@ def _add_model_metadata(
             styles,
             content_width,
             [
-                ("Request ID", prediction.id if prediction is not None else "N/A"),
-                ("Model Version", prediction.model_version if prediction is not None else "N/A"),
+                ("Request ID", prediction.id if prediction is not None else "Not captured"),
+                ("Model Version", prediction.model_version if prediction is not None else "Not captured"),
                 ("Threshold Profile", _threshold_profile_text(prediction)),
                 ("Model Scope", "Clinical decision-support classifier predicts ESI 3/4/5; safety gate and clinician review handle ESI 1/2 escalation"),
                 ("Assessment ID", assessment.id),
@@ -918,8 +918,8 @@ def _add_audit_trail(
             content_width,
             [
                 ("Assessment ID", assessment.id),
-                ("Request ID", prediction.id if prediction is not None else "N/A"),
-                ("Model Version", prediction.model_version if prediction is not None else "N/A"),
+                ("Request ID", prediction.id if prediction is not None else "Not captured"),
+                ("Model Version", prediction.model_version if prediction is not None else "Not captured"),
                 ("Generated time", generated_at),
                 ("Review Status", _review_status(clinician_review)),
             ],
@@ -1027,7 +1027,7 @@ def _report_final_esi(
 def _patient_summary(assessment: Assessment) -> str:
     patient = getattr(assessment, "patient", None)
     name = getattr(patient, "name", None)
-    display_name = name.strip() if isinstance(name, str) and name.strip() else "Unknown patient"
+    display_name = name.strip() if isinstance(name, str) and name.strip() else "Not captured"
     age = _display(getattr(patient, "age", None))
     sex = _display(getattr(patient, "sex", None))
     return f"{display_name} ({age}, {sex})"
@@ -1035,7 +1035,7 @@ def _patient_summary(assessment: Assessment) -> str:
 
 def _patient_mrn(assessment: Assessment) -> str:
     mrn = getattr(getattr(assessment, "patient", None), "mrn", None)
-    return mrn.strip() if isinstance(mrn, str) and mrn.strip() else "N/A"
+    return mrn.strip() if isinstance(mrn, str) and mrn.strip() else "Not captured"
 
 
 def _vital_cells(assessment: Assessment) -> list[tuple[str, str, str]]:
@@ -1062,7 +1062,7 @@ def _vital_style(
 
 def _threshold_profile_text(prediction: Prediction | None) -> str:
     if prediction is None:
-        return "N/A"
+        return "Not captured"
     return f"Backend safety gate / {_readable_value(prediction.final_source)}"
 
 
@@ -1399,7 +1399,7 @@ def _footer(canvas: Any, document: SimpleDocTemplate) -> None:
     canvas.drawString(
         document.leftMargin,
         footer_y,
-        "This report supports structured triage review and does not replace clinician judgment, diagnosis, or emergency protocols.",
+        "This report supports structured triage review, is not diagnosis, and does not replace clinician judgment or emergency protocols.",
     )
     canvas.drawRightString(page_width - document.rightMargin, footer_y, f"Page {document.page}")
     canvas.restoreState()
@@ -1515,7 +1515,7 @@ def _esi(value: int | None) -> str:
 
 
 def _esi_badge(value: int | None) -> str:
-    return "N/A" if value is None else f"ESI {value}"
+    return "Not captured" if value is None else f"ESI {value}"
 
 
 def _percent(value: Any) -> str:

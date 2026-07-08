@@ -299,8 +299,8 @@ function mapBackendAssessment(detail: AssessmentDetail): AssessmentRecord {
     intake: {
       patient: {
         id: textOrFallback(detail.patient_id, detail.assessment_id),
-        mrn: textOrFallback(detail.mrn, 'N/A'),
-        name: textOrFallback(detail.patient_name, 'Unknown patient'),
+        mrn: textOrFallback(detail.mrn, '—'),
+        name: textOrFallback(detail.patient_name, '—'),
         age,
         sex: normalizeSex(detail.sex ?? detail.intake?.sex),
         arrivalMode: normalizeArrivalMode(detail.arrival_mode ?? detail.intake?.arrival_mode)
@@ -563,7 +563,7 @@ export function AssessmentDetailPage() {
             <CardBody className="space-y-4">
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">MRN</p><p className="font-data mt-1 break-words font-bold text-slate-950">{intake.patient.mrn}</p></div>
-                <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Demographics</p><p className="mt-1 font-bold text-slate-950">{intake.patient.age} • {intake.patient.sex || 'Unknown'}</p></div>
+                <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Demographics</p><p className="mt-1 font-bold text-slate-950">{intake.patient.age} • {intake.patient.sex || '—'}</p></div>
                 <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Arrival</p><p className="mt-1 font-bold text-slate-950">{intake.patient.arrivalMode}</p></div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-3">

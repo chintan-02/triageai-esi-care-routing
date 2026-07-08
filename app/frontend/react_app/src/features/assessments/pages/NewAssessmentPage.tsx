@@ -369,7 +369,7 @@ export function NewAssessmentPage() {
                       <CheckCircle2 size={18} />
                       Ready for prediction
                     </div>
-                    <p className="mt-1 text-emerald-800">Required intake fields are complete for the mock decision-support run.</p>
+                    <p className="mt-1 text-emerald-800">Required intake fields are complete for backend ESI decision support.</p>
                   </div>
                 )}
                 <div className="grid gap-2.5 xl:grid-cols-2">
@@ -494,7 +494,7 @@ export function NewAssessmentPage() {
             ) : (
               <div className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-2.5 text-sm text-emerald-800">
                 <div className="flex gap-2 font-bold"><CheckCircle2 size={18} /> Ready for prediction</div>
-                <p className="mt-1">The assessment adapter will return model, latency, safety gate, and audit metadata.</p>
+                <p className="mt-1">The backend will return model output, latency, safety gate, and audit metadata.</p>
               </div>
             )}
           </div>

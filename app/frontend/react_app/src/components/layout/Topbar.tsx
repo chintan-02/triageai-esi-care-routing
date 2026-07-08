@@ -23,7 +23,7 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const statusLabel = backendConnected ? 'Backend connected' : modelUnavailable ? 'Model unavailable' : isReadinessLoading ? 'Checking API' : 'API offline';
   const statusDetail = backendConnected ? compactModelName(readiness?.model_name) : modelUnavailable ? 'Model not loaded' : 'FastAPI unavailable';
   const statusTitle = backendConnected
-    ? `Final model: ${readiness?.model_name ?? 'Unknown'}\nVersion: ${readiness?.model_version ?? 'Unknown'}`
+    ? `Final model: ${readiness?.model_name ?? 'Unavailable'}\nVersion: ${readiness?.model_version ?? 'Unavailable'}`
     : readinessError ?? 'Waiting for backend readiness.';
   const statusClass = backendConnected
     ? 'border-emerald-200 bg-emerald-50 text-emerald-800'

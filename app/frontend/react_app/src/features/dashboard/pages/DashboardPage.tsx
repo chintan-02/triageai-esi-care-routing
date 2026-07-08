@@ -56,7 +56,7 @@ function normalizeDistribution(distribution: Record<string, number>): Record<str
 }
 
 function EsiCell({ level }: { level: EsiLevel | null }) {
-  if (!level) return <span className="text-xs font-semibold text-slate-500">N/A</span>;
+  if (!level) return <span className="text-xs font-semibold text-slate-500">—</span>;
   return <EsiBadge level={level} />;
 }
 
@@ -91,14 +91,18 @@ export function DashboardPage() {
   );
 
   const stats = useMemo(
-    () => ({
-      totalAssessments: summary?.total_assessments ?? 0,
-      pendingReviews: summary?.pending_reviews ?? 0,
-      completedReviews: summary?.completed_reviews ?? summary?.reviewed_assessments ?? 0,
-      overrideCount: summary?.override_count ?? 0,
-      safetyEscalations: summary?.high_risk_flags ?? 0,
-      esiDistribution: normalizeDistribution(summary?.esi_distribution ?? {})
-    }),
+    () => {
+      const esiDistribution = normalizeDistribution(summary?.esi_distribution ?? {});
+      const routedAssessments = Object.values(esiDistribution).reduce((sum, value) => sum + value, 0);
+      return {
+        totalAssessments: summary?.total_assessments ?? 0,
+        pendingReviews: summary?.pending_reviews ?? 0,
+        routedAssessments,
+        overrideCount: summary?.override_count ?? 0,
+        safetyEscalations: summary?.high_risk_flags ?? 0,
+        esiDistribution
+      };
+    },
     [summary]
   );
 
@@ -138,10 +142,10 @@ export function DashboardPage() {
         <SkeletonStatRow />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Assessments" value={stats.totalAssessments} hint="Loaded from backend database" icon={<Activity size={22} />} tone="blue" />
-          <StatCard label="Pending Reviews" value={stats.pendingReviews} hint="Clinician review still required" icon={<Clock size={22} />} tone="amber" />
-          <StatCard label="Completed Reviews" value={stats.completedReviews} hint={`${stats.overrideCount} overridden decisions`} icon={<ShieldCheck size={22} />} tone="green" />
-          <StatCard label="Safety Escalations" value={stats.safetyEscalations} hint="High-acuity final routing count" icon={<AlertTriangle size={22} />} tone="red" />
+          <StatCard label="Total assessments" value={stats.totalAssessments} hint="Loaded from backend database" icon={<Activity size={22} />} tone="blue" />
+          <StatCard label="Pending review" value={stats.pendingReviews} hint="Clinician review still required" icon={<Clock size={22} />} tone="amber" />
+          <StatCard label="Routed assessments" value={stats.routedAssessments} hint={`${stats.overrideCount} overridden decisions`} icon={<ShieldCheck size={22} />} tone="green" />
+          <StatCard label="Safety escalations" value={stats.safetyEscalations} hint="High-acuity final routing count" icon={<AlertTriangle size={22} />} tone="red" />
         </div>
       )}
 
@@ -187,9 +191,9 @@ export function DashboardPage() {
                     <tr key={record.assessment_id} className="hover:bg-slate-50/70">
                       <td className="px-5 py-4">
                         <Link to={`/assessments/${record.assessment_id}`} className="font-bold text-slate-950 hover:text-clinical-blue">
-                          {textOrFallback(record.patient_name, 'Unknown patient')}
+                          {textOrFallback(record.patient_name, '—')}
                         </Link>
-                        <p className="font-data text-xs text-slate-500">{textOrFallback(record.mrn, 'N/A')}</p>
+                        <p className="font-data text-xs text-slate-500">{textOrFallback(record.mrn, '—')}</p>
                       </td>
                       <td className="px-5 py-4">
                         <p className="max-w-[240px] overflow-hidden text-ellipsis text-slate-700 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">

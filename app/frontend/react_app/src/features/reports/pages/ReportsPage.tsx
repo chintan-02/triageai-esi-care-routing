@@ -53,9 +53,9 @@ function normalizeReviewStatus(item: AssessmentListItem): ReviewStatus {
 function mapReportRow(item: AssessmentListItem): ReportRow {
   return {
     id: item.assessment_id,
-    patientName: textOrFallback(item.patient_name, 'Unknown patient'),
-    mrn: textOrFallback(item.mrn, 'N/A'),
-    chiefComplaint: textOrFallback(item.chief_complaint, 'Not documented'),
+    patientName: textOrFallback(item.patient_name, '—'),
+    mrn: textOrFallback(item.mrn, '—'),
+    chiefComplaint: textOrFallback(item.chief_complaint, '—'),
     finalEsi: isEsiLevel(item.final_esi) ? item.final_esi : null,
     predictedEsi: isEsiLevel(item.model_predicted_esi) ? item.model_predicted_esi : null,
     latencyMs: typeof item.latency_ms === 'number' ? item.latency_ms : null,
@@ -70,7 +70,7 @@ function shortAssessmentId(id: string): string {
 }
 
 function EsiCell({ level, prefix }: { level: EsiLevel | null; prefix?: string }) {
-  if (!level) return <span className="text-xs font-semibold text-slate-500">N/A</span>;
+  if (!level) return <span className="text-xs font-semibold text-slate-500">—</span>;
   return <EsiBadge level={level} prefix={prefix} />;
 }
 
@@ -281,7 +281,7 @@ export function ReportsPage() {
                       <td className="px-5 py-4">
                         <ReviewStatusBadge status={record.reviewStatus} />
                       </td>
-                      <td className="px-5 py-4 text-slate-500">{record.createdAt ? formatDateTime(record.createdAt) : 'N/A'}</td>
+                      <td className="px-5 py-4 text-slate-500">{record.createdAt ? formatDateTime(record.createdAt) : '—'}</td>
                       <td className="px-5 py-4 text-right">
                         <Button variant="secondary" onClick={() => void download(record)} disabled={downloadingId === record.id}>
                           <Download size={15} /> {downloadingId === record.id ? 'Generating...' : record.hasBackendReport ? 'Download PDF' : 'Generate PDF'}
