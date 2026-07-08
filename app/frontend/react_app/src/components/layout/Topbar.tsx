@@ -2,14 +2,34 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, LogOut, Menu, Search, ServerCog } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { apiClient } from '@/api/apiClient';
+import { useModelStatus } from '@/context/ModelStatusContext';
 import { roleSummary } from '@/lib/permissions';
+
+function compactModelName(modelName?: string | null) {
+  if (!modelName) return 'Model ready';
+  if (modelName.toLowerCase().includes('lightgbm v2')) return 'LightGBM V2';
+  return modelName;
+}
 
 export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { user, logout } = useAuth();
+  const { readiness, isReadinessLoading, readinessError } = useModelStatus();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
+
+  const backendConnected = Boolean(readiness && readiness.model_loaded && !readiness.is_placeholder);
+  const modelUnavailable = Boolean(readiness && (!readiness.model_loaded || readiness.is_placeholder));
+  const statusLabel = backendConnected ? 'Backend connected' : modelUnavailable ? 'Model unavailable' : isReadinessLoading ? 'Checking API' : 'API offline';
+  const statusDetail = backendConnected ? compactModelName(readiness?.model_name) : modelUnavailable ? 'Model not loaded' : 'FastAPI unavailable';
+  const statusTitle = backendConnected
+    ? `Final model: ${readiness?.model_name ?? 'Unknown'}\nVersion: ${readiness?.model_version ?? 'Unknown'}`
+    : readinessError ?? 'Waiting for backend readiness.';
+  const statusClass = backendConnected
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+    : modelUnavailable
+      ? 'border-amber-200 bg-amber-50 text-amber-800'
+      : 'border-red-200 bg-red-50 text-red-800';
 
   const submitSearch = (event: FormEvent) => {
     event.preventDefault();
@@ -35,8 +55,15 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
         </form>
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
-          <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 sm:flex">
-            <ServerCog size={14} /> {apiClient.mode === 'mock' ? 'Standalone mock mode' : 'Live FastAPI'}
+          <div
+            className={`hidden items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] sm:flex ${statusClass}`}
+            title={statusTitle}
+          >
+            <ServerCog size={14} />
+            <span className="flex flex-col leading-tight">
+              <span>{statusLabel}</span>
+              <span className="font-bold tracking-[0.08em] opacity-80">{statusDetail}</span>
+            </span>
           </div>
           <button className="focus-ring flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50" aria-label="Notifications">
             <Bell size={18} />
