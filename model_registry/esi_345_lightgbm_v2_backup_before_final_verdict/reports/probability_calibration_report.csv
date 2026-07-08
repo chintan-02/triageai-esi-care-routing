@@ -1,0 +1,4 @@
+method,test_brier,test_log_loss
+platt_logistic_validation_calibrated,0.28119266987249686,0.48077859895021713
+isotonic_one_vs_rest_validation_calibrated,0.2823214205213831,0.4794807664426082
+raw_lightgbm_probability,0.31171162166682964,0.5374974095988022

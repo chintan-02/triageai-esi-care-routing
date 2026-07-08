@@ -1,0 +1,18 @@
+{
+  "project": "TriageAI / SympDirect",
+  "task": "client_focused_esi_3_4_5",
+  "model_version": "lightgbm_v2_weight_threshold_esi345",
+  "model_display_name": "LightGBM V2 Weight + Threshold",
+  "model_file": "esi_345_lightgbm_v2_model.txt",
+  "preprocessing_artifacts_file": "esi_345_lightgbm_v2_preprocessing_artifacts.joblib",
+  "feature_list_file": "esi_345_lightgbm_v2_feature_list.json",
+  "threshold_config_file": "esi_345_lightgbm_v2_threshold_config.json",
+  "label_mapping_file": "esi_345_label_mapping.json",
+  "target_source_column": "esi",
+  "derived_label_column": "esi_label",
+  "deployment_threshold": 0.6,
+  "selected_calibration_method": "raw_lightgbm_probability",
+  "deploy_calibrated_probabilities": false,
+  "important_warning": "This model excludes ESI 1 and ESI 2. Use the safety gate before this model.",
+  "clinical_safety_wording": "Decision support only. Not a diagnostic tool. Does not replace clinicians."
+}
