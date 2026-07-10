@@ -181,7 +181,11 @@ def _detect_safety_cues(
     if vitals.o2 is not None and vitals.o2 <= 92:
         _add_unique(cues, "low oxygen")
 
-    if vitals.sbp is not None and vitals.sbp <= 90:
+    if (
+        vitals.sbp is not None
+        and vitals.dbp is not None
+        and (vitals.sbp <= 90 or vitals.dbp <= 60)
+    ):
         _add_unique(cues, "low blood pressure")
 
     if vitals.hr is not None and vitals.hr >= 110:

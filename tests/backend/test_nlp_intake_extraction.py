@@ -48,6 +48,10 @@ def test_bp_over_format_is_extracted():
     assert result.vitals.sbp == 92
     assert result.vitals.dbp == 60
 
+def test_low_blood_pressure_detects_low_diastolic_pressure():
+    result = extract_clinical_intake("BP 92/60 with dizziness.")
+
+    assert "low blood pressure" in result.safety_cues
 
 def test_oxygen_percent_format_is_extracted():
     result = extract_clinical_intake("O2 91% on arrival.")
