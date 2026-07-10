@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.backend.api.routes.nlp import router as nlp_router
 from app.backend.api.routes.assessments import router as assessments_router
 from app.backend.api.routes.clinician_review import router as clinician_review_router
 from app.backend.api.routes.dashboard import router as dashboard_router
@@ -39,6 +40,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(nlp_router)
 app.include_router(health_router)
 app.include_router(speech_router)
 app.include_router(predict_router)
