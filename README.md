@@ -1,66 +1,266 @@
 # TriageAI / SympDirect — ESI Clinical Intake & Care Routing Assistant
 
-A backend-connected healthcare AI decision-support workflow that combines structured clinical intake, a final LightGBM ESI 3/4/5 model, safety-rule escalation, clinician review, audit logging, and PDF report generation.
+<div align="center">
+
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/Frontend-React_+_TypeScript-20232A?style=flat-square&logo=react&logoColor=61DAFB)
+![LightGBM](https://img.shields.io/badge/Model-LightGBM_V2-02569B?style=flat-square)
+![Testing](https://img.shields.io/badge/Testing-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
+![Status](https://img.shields.io/badge/Status-Active_Development-F59E0B?style=flat-square)
+
+**A review-first healthcare AI decision-support workflow for structured clinical intake, ESI care routing, safety escalation, clinician review, auditability, and PDF reporting.**
+
+[Portfolio Case Study](https://chintan-patel-ai.netlify.app/case-studies/triageai)
+
+</div>
+
+---
+
+> [!IMPORTANT]
+> TriageAI is a portfolio and educational clinical decision-support workflow. It does not diagnose patients, replace clinician judgment, or operate as a validated clinical system. Live clinical use would require formal clinical validation, governance, privacy and security review, regulatory assessment, controlled deployment, and organizational approval.
+
+---
 
 ## Project Status
 
-- React + FastAPI migration is completed for local development and demo workflows.
-- Final LightGBM V2 model registry is integrated through the backend.
-- Backend/database is the source of truth for real assessments, predictions, reviews, audit events, dashboard data, and official PDF reports.
-- React frontend is connected to real FastAPI endpoints by default.
-- Streamlit legacy frontend is retained under `app/frontend/streamlit_app/`.
-- SQLite is used for local demo/development.
-- PostgreSQL is recommended for Azure or other professional deployments.
-- NLP-assisted intake extraction is planned next; it is not yet built as an end-to-end extraction workflow.
+- React + FastAPI migration is completed for local development and demonstration workflows.
+- The final LightGBM V2 ESI 3/4/5 model registry is integrated through the backend.
+- The backend and database are the source of truth for assessments, predictions, reviews, audit events, dashboard data, and official PDF reports.
+- The React frontend is connected to real FastAPI endpoints by default.
+- A backend **Clinical Intake NLP Safety Layer** is implemented through `POST /nlp/extract-intake`.
+- The NLP layer extracts reviewable fields, source-text evidence, safety cues, and missing vital-sign information from clinician free-text notes.
+- React-based review and correction of extracted NLP fields remains a planned frontend integration step.
+- The legacy Streamlit frontend is retained under `app/frontend/streamlit_app/`.
+- SQLite is used for local development and demonstration.
+- PostgreSQL is the recommended database for professional cloud deployment.
 
-## Clinical Safety Disclaimer
-
-This project is for portfolio, educational, and clinical decision-support workflow demonstration purposes only. It does not diagnose patients, does not replace clinician judgment, and should not be used as a live clinical system without clinical validation, governance, security review, and regulatory approval.
+---
 
 ## Problem Statement
 
-Emergency intake teams need structured, auditable decision-support workflows. Raw symptoms and vitals need to become structured data, and machine-learning predictions alone are not enough in healthcare.
+Emergency intake workflows require more than a model prediction.
 
-TriageAI / SympDirect combines structured intake, ML-assisted ESI care routing, transparent safety guardrails, clinician review, audit trail storage, and backend-generated PDF decision-support summaries.
+Clinician notes, symptoms, demographics, and vital signs must be converted into structured and reviewable information. Safety-sensitive cases need transparent escalation rules. Final routing decisions need clinician oversight, and every meaningful action should be traceable.
+
+TriageAI combines:
+
+- structured clinical intake
+- review-first free-text extraction
+- LightGBM-assisted ESI 3/4/5 classification
+- transparent safety-rule escalation
+- clinician accept or override review
+- database persistence
+- audit trail storage
+- dashboard and assessment workflows
+- backend-generated PDF decision-support summaries
+
+The system is positioned as **clinical workflow decision support**, not diagnosis or autonomous triage.
+
+---
 
 ## What the System Does
 
-- Provides a React healthcare SaaS workflow with login/demo app shell and role-oriented pages.
+- Provides a React healthcare SaaS-style workflow with a login/demo shell and role-oriented pages.
 - Captures structured patient intake through the New Assessment workflow.
+- Converts clinician free-text notes into reviewable structured fields through the Clinical Intake NLP Safety Layer.
+- Returns source-text evidence for extracted values rather than presenting unsupported fields as verified truth.
+- Identifies configured safety cues and missing vital-sign information.
 - Calls the FastAPI backend `POST /predict` endpoint to create real backend assessments.
 - Runs the final LightGBM V2 ESI 3/4/5 prediction path through the backend model registry.
-- Applies safety-rule escalation for high-risk intake signals.
-- Supports human clinician accept/override review.
-- Displays assessment queue, assessment detail, command center/dashboard, reports, audit trail, model monitoring, and settings pages.
-- Generates official PDF decision-support summaries on the backend with ReportLab.
-- Persists prediction latency and exposes it across backend responses and frontend views.
+- Applies transparent safety-rule escalation for high-risk intake signals.
+- Supports human clinician accept, override, and needs-review actions.
+- Displays assessment queue, assessment detail, command center, reports, audit trail, model monitoring, and settings pages.
+- Generates official PDF decision-support summaries through the backend ReportLab service.
+- Persists prediction latency and exposes it through backend responses and frontend views.
 - Stores audit events server-side for prediction, review, and report-generation traceability.
-- Includes a local demo reset/seed workflow for screenshot-ready records.
+- Includes a local reset and seed workflow for repeatable demonstration records.
+
+---
 
 ## High-Level Architecture
 
 ```text
+Clinician Free-Text Note or Structured Intake
+                    ↓
+Clinical Intake NLP Safety Layer
+                    ↓
+Extracted Fields + Evidence + Safety Cues + Missing Fields
+                    ↓
+Human Review / Correction Before Prediction
+                    ↓
 React Frontend
-  ↓
+                    ↓
 FastAPI Backend
-  ↓
+                    ↓
 Clinical Input Validation + Feature Builder
-  ↓
+                    ↓
 LightGBM V2 ESI 3/4/5 Model Registry
-  ↓
+                    ↓
 Safety Rule Escalation Layer
-  ↓
-SQLite/PostgreSQL-Compatible Database
-  ↓
+                    ↓
+SQLite / PostgreSQL-Compatible Database
+                    ↓
 Clinician Review + Audit Trail + PDF Report
 ```
 
-The frontend does not own assessment truth. React calls backend APIs, and the backend/database remains the source of truth. Official PDFs are generated by the backend ReportLab service. Audit events are stored server-side.
+The frontend does not own assessment truth. React calls backend APIs, while the backend and database remain the source of truth. Official PDFs are generated by the backend, and audit events are stored server-side.
+
+---
+
+## Clinical Intake NLP Safety Layer
+
+The Clinical Intake NLP Safety Layer converts clinician free-text notes into structured fields for review before prediction.
+
+It is implemented as a deterministic, evidence-linked extraction service rather than a diagnostic chatbot.
+
+### Extracted fields
+
+The current response schema supports:
+
+- age
+- gender
+- chief complaint
+- symptom list
+- heart rate
+- systolic blood pressure
+- diastolic blood pressure
+- respiratory rate
+- oxygen saturation
+- temperature
+- safety cues
+- missing vital-sign fields
+- evidence snippets showing the source text for extracted values
+
+Every extraction response includes:
+
+```text
+requires_clinician_review = true
+```
+
+The endpoint also returns the disclaimer:
+
+```text
+Decision support only. Extracted fields require clinician review before prediction.
+```
+
+### Current safety cues
+
+The NLP layer can identify configured cues such as:
+
+- chest pain
+- shortness of breath
+- low oxygen saturation
+- low blood pressure
+- tachycardia
+- stroke symptoms
+- unresponsiveness
+- seizure
+- suicidal ideation
+- pregnancy with abdominal pain
+- severe trauma
+- fever in an older adult
+
+These cues support review and workflow escalation. They do not independently establish a diagnosis or final ESI level.
+
+### Missing-information handling
+
+The extraction layer does not invent vital signs that are absent from the note.
+
+It explicitly reports missing information such as:
+
+- respiratory rate
+- oxygen saturation
+- blood pressure
+- heart rate
+- temperature
+
+### Example request
+
+```bash
+curl -X POST "http://localhost:8001/nlp/extract-intake" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "note_text": "62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."
+  }'
+```
+
+### Example response shape
+
+```json
+{
+  "age": 62,
+  "gender": "Male",
+  "chief_complaint": "chest pain",
+  "symptoms": [
+    "chest pain",
+    "shortness of breath"
+  ],
+  "vitals": {
+    "hr": 118,
+    "sbp": 92,
+    "dbp": 60,
+    "rr": null,
+    "o2": 91,
+    "temp": 38.2
+  },
+  "safety_cues": [
+    "chest pain",
+    "shortness of breath",
+    "low oxygen",
+    "low blood pressure",
+    "tachycardia"
+  ],
+  "missing_fields": [
+    "respiratory rate"
+  ],
+  "evidence": [
+    {
+      "field": "age",
+      "value": 62,
+      "text": "62-year-old"
+    },
+    {
+      "field": "gender",
+      "value": "Male",
+      "text": "male"
+    },
+    {
+      "field": "symptom",
+      "value": "chest pain",
+      "text": "chest pain"
+    },
+    {
+      "field": "symptom",
+      "value": "shortness of breath",
+      "text": "shortness of breath"
+    }
+  ],
+  "requires_clinician_review": true,
+  "disclaimer": "Decision support only. Extracted fields require clinician review before prediction."
+}
+```
+
+> The evidence list is shortened for readability. The actual response can include additional evidence records for recognized vital signs and other extracted fields.
+
+### NLP safety boundaries
+
+The NLP layer:
+
+- does not diagnose patients
+- does not independently assign the final ESI level
+- does not replace structured clinical assessment
+- does not replace clinician judgment
+- does not treat extracted fields as automatically verified truth
+- does not invent values for absent information
+- requires review before extracted information is used in prediction
+
+---
 
 ## AI/ML Model Details
 
 | Field | Value |
-| --- | --- |
+|---|---|
 | Model | LightGBM V2 Weight + Threshold |
 | Task | ESI 3/4/5 classification |
 | Model source | `final_registry` |
@@ -68,59 +268,93 @@ The frontend does not own assessment truth. React calls backend APIs, and the ba
 | Registry path | `model_registry/esi_345_lightgbm_v2/` |
 | Feature count | 273 |
 | Class order | `ESI_3`, `ESI_4`, `ESI_5` |
-| Calibration method | `raw_lightgbm_probability` retained |
-| Threshold config loaded | Yes |
-| Placeholder model | False in the validated local backend runtime when final registry artifacts are available. |
+| Calibration method | Raw LightGBM probability retained |
+| Threshold configuration | Loaded |
+| Placeholder model | No, when validated final-registry artifacts are available |
 
-Verified metrics from `model_registry/esi_345_lightgbm_v2/reports/lightgbm_v2_test_metrics.json`:
+Verified metrics from:
+
+```text
+model_registry/esi_345_lightgbm_v2/reports/lightgbm_v2_test_metrics.json
+```
 
 | Metric | Value |
-| --- | ---: |
-| Accuracy | 78.32% |
-| Macro F1 | 70.37% |
-| Weighted F1 | 78.88% |
-| ESI 5 F1 | 54.70% |
-| Unsafe ESI 3-to-ESI 5 downgrade rate | 0.68% |
+|---|---:|
+| Accuracy | **78.32%** |
+| Macro F1 | **70.37%** |
+| Weighted F1 | **78.88%** |
+| ESI 5 F1 | **54.70%** |
+| Unsafe ESI 3-to-ESI 5 downgrade rate | **0.68%** |
 
-The selected model balances overall classification quality with safety-sensitive ESI 5 behavior and downgrade-risk controls. Calibration was evaluated, but raw LightGBM probabilities were retained because calibrated challengers did not preserve all clinical guardrails.
+The selected model balances overall classification quality with safety-sensitive ESI 5 behavior and downgrade-risk controls. Calibration was evaluated, but raw LightGBM probabilities were retained because calibrated challengers did not preserve all configured clinical guardrails.
 
-Important artifacts:
+### Important model artifacts
 
 ```text
 model_registry/esi_345_lightgbm_v2/
-  artifact_manifest.json
-  esi_345_deployment_config.json
-  esi_345_label_mapping.json
-  esi_345_lightgbm_v2_feature_list.json
-  esi_345_lightgbm_v2_model.txt
-  esi_345_lightgbm_v2_preprocessing_artifacts.joblib
-  esi_345_lightgbm_v2_threshold_config.json
-  reports/lightgbm_v2_test_metrics.json
+├── artifact_manifest.json
+├── esi_345_deployment_config.json
+├── esi_345_label_mapping.json
+├── esi_345_lightgbm_v2_feature_list.json
+├── esi_345_lightgbm_v2_model.txt
+├── esi_345_lightgbm_v2_preprocessing_artifacts.joblib
+├── esi_345_lightgbm_v2_threshold_config.json
+└── reports/
+    └── lightgbm_v2_test_metrics.json
 ```
 
-Final notebook:
+### Final source-of-truth notebook
 
 ```text
-notebooks/FINAL_SOURCE_OF_TRUTH/ESI_345_FINAL_DEPLOYMENT_LIGHTGBM_V2_SAFETY_TUNED_FINAL_VERDICT_CHECKED.ipynb
+notebooks/FINAL_SOURCE_OF_TRUTH/
+└── ESI_345_FINAL_DEPLOYMENT_LIGHTGBM_V2_SAFETY_TUNED_FINAL_VERDICT_CHECKED.ipynb
 ```
+
+---
 
 ## Safety Rules and Human-in-the-Loop Review
 
-The ML prediction is not blindly accepted. The model predicts ESI 3/4/5, and transparent safety rules can escalate the final routing decision for urgent clinician review.
+The ML prediction is not accepted blindly.
 
-Current safety-rule triggers include low oxygen saturation, altered consciousness wording, chest pain with shortness of breath, severe bleeding wording, and pregnancy with bleeding wording. If a safety rule triggers, the final ESI is escalated to ESI 2 as a workflow safeguard.
+The model predicts ESI 3, 4, or 5, while transparent safety rules can escalate the final routing result for urgent clinician review.
 
-Clinicians can accept the final routing decision or override it. Accept/override actions are persisted and recorded in the audit trail. The final acuity is a decision-support output for ESI care routing, not diagnosis.
+Current safety-rule triggers include:
+
+- low oxygen saturation
+- altered-consciousness wording
+- chest pain with shortness of breath
+- severe-bleeding wording
+- pregnancy with bleeding wording
+
+When a configured safety rule triggers, the workflow can escalate the final routing result to ESI 2 as a safety safeguard.
+
+Clinicians can:
+
+- accept the final routing result
+- override the result
+- mark the assessment as requiring further review
+
+Review actions are persisted and recorded in the audit trail. The final acuity is a decision-support output for care routing, not a diagnosis.
+
+---
 
 ## Backend Details
 
-The FastAPI backend lives in `app/backend/` and is responsible for:
+The FastAPI backend lives in:
+
+```text
+app/backend/
+```
+
+It is responsible for:
 
 - route handling and schema validation
-- readiness checks
-- model registry loading
+- health and readiness checks
+- review-first clinical-note extraction
+- extraction evidence and missing-field reporting
+- model-registry loading
 - feature building and prediction execution
-- latency tracking
+- prediction-latency tracking
 - safety-rule escalation
 - database persistence
 - clinician review workflow
@@ -128,31 +362,38 @@ The FastAPI backend lives in `app/backend/` and is responsible for:
 - dashboard summaries
 - backend PDF generation
 
-Actual endpoints included by `app/backend/api/main.py`:
+### Live backend endpoints
 
 | Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/health` | Basic API health check |
-| GET | `/ready` | Database/model readiness, model metadata, feature count, class order |
-| POST | `/predict` | Create assessment, run prediction, persist prediction metadata |
-| POST | `/assessments` | Create stored assessment without running prediction |
-| GET | `/assessments` | List stored assessments |
-| GET | `/assessments/{assessment_id}` | Load assessment detail, prediction, review, audit, report IDs |
-| GET | `/assessments/{assessment_id}/audit` | Load assessment audit trail |
-| GET | `/assessments/{assessment_id}/report/pdf` | Get or generate official backend PDF |
-| POST | `/clinician-review` | Save clinician accept/override/needs-review action |
-| GET | `/dashboard/summary` | Backend dashboard summary |
-| POST | `/reports/generate` | Compatibility report-generation endpoint |
-| GET | `/reports/{report_id}/download` | Download generated report by report ID |
-| POST | `/speech/transcribe` | Placeholder speech transcription endpoint |
+|---|---|---|
+| `GET` | `/health` | Basic API health check |
+| `GET` | `/ready` | Database and model readiness, metadata, feature count, and class order |
+| `POST` | `/nlp/extract-intake` | Extract reviewable structured fields from clinician free-text notes |
+| `POST` | `/predict` | Create an assessment, run prediction, and persist prediction metadata |
+| `POST` | `/assessments` | Create a stored assessment without running prediction |
+| `GET` | `/assessments` | List stored assessments |
+| `GET` | `/assessments/{assessment_id}` | Load assessment, prediction, review, audit, and report details |
+| `GET` | `/assessments/{assessment_id}/audit` | Load the assessment audit trail |
+| `GET` | `/assessments/{assessment_id}/report/pdf` | Get or generate the official backend PDF |
+| `POST` | `/clinician-review` | Save accept, override, or needs-review action |
+| `GET` | `/dashboard/summary` | Return backend dashboard summary |
+| `POST` | `/reports/generate` | Compatibility report-generation endpoint |
+| `GET` | `/reports/{report_id}/download` | Download a generated report |
+| `POST` | `/speech/transcribe` | Placeholder speech-transcription endpoint |
 
-`app/backend/api/routes/auth.py` exists, but its router is not included in `app/backend/api/main.py`, so auth API routes are not documented as live backend endpoints.
+`app/backend/api/routes/auth.py` exists, but its router is not currently included in `app/backend/api/main.py`. Authentication routes are therefore not documented as live backend endpoints.
+
+---
 
 ## Frontend Details
 
-The primary frontend lives in `app/frontend/react_app/`.
+The primary frontend lives in:
 
-Stack:
+```text
+app/frontend/react_app/
+```
+
+### Stack
 
 - Vite
 - React
@@ -162,40 +403,54 @@ Stack:
 - Recharts
 - lucide-react
 
-Actual React pages/routes:
+### React routes
 
 | Route | Page |
-| --- | --- |
-| `/login` | Login/demo app shell |
-| `/command-center` | Command Center / Dashboard |
+|---|---|
+| `/login` | Login and demo application shell |
+| `/command-center` | Command Center and dashboard |
 | `/new-assessment` | New Intake |
-| `/assessments` | Assessments list |
-| `/assessments/:id` | Assessment Detail |
+| `/assessments` | Assessment list |
+| `/assessments/:id` | Assessment detail |
 | `/reports` | Reports |
-| `/audit` | Audit Trail |
-| `/model-monitoring` | Model Monitoring |
+| `/audit` | Audit trail |
+| `/model-monitoring` | Model monitoring |
 | `/settings` | Settings |
 
-The frontend has an API client layer under `app/frontend/react_app/src/api/`, model status context under `src/context/ModelStatusContext.tsx`, and feature pages under `src/features/`.
+The frontend includes:
 
-Backend-connected mode is the default for production workflows:
+- API client services under `src/api/`
+- model-status context under `src/context/ModelStatusContext.tsx`
+- feature-oriented modules under `src/features/`
+- loading, error, empty, and disconnected states
+- real backend mode as the default assessment workflow
+
+Backend-connected mode:
 
 ```env
 VITE_USE_MOCK_API=false
 VITE_API_BASE_URL=http://localhost:8001
 ```
 
-`mockData.ts` and `mockApi.ts` are retained as development/test fixtures and explicit mock-mode fallback only. `localStorage` is not the source of truth for real assessments.
+`mockData.ts` and `mockApi.ts` are retained only as explicit development or test fixtures. Browser `localStorage` is not the source of truth for real assessments.
 
-The legacy browser-side `src/lib/reportPdf.ts` helper is retained for fallback/mock experimentation only. Official reports use the backend endpoint:
+The legacy browser-side PDF helper is retained for fallback experimentation. Official reports use:
 
 ```http
 GET /assessments/{assessment_id}/report/pdf
 ```
 
+The NLP endpoint is implemented in the backend. A dedicated React review-and-correction interface for extracted NLP fields remains part of the next integration phase.
+
+---
+
 ## Database and Persistence
 
-SQLAlchemy models live in `app/backend/db/models.py`.
+SQLAlchemy models live in:
+
+```text
+app/backend/db/models.py
+```
 
 Current entities:
 
@@ -213,76 +468,121 @@ Local development uses SQLite:
 DATABASE_URL=sqlite:///./triageai.db
 ```
 
-Azure or other professional deployments should use PostgreSQL. The backend/database is the source of truth. PDF reports are generated by the backend, report records are stored in the database, and audit trail events are stored server-side.
+Professional cloud deployment should use PostgreSQL.
 
-## Project Folder Structure
+The backend and database remain the source of truth. PDF records, predictions, clinician reviews, and audit events are stored server-side.
+
+---
+
+## Project Structure
 
 ```text
 app/
-  backend/
-    api/
-      routes/
-    core/
-    db/
-    schemas/
-    services/
-    utils/
-  frontend/
-    react_app/
-      src/
-        api/
-        app/
-        components/
-        context/
-        features/
-        lib/
-        types/
-    streamlit_app/
+├── backend/
+│   ├── api/
+│   │   └── routes/
+│   │       ├── nlp.py
+│   │       ├── predict.py
+│   │       ├── assessments.py
+│   │       ├── clinician_review.py
+│   │       ├── dashboard.py
+│   │       ├── reports.py
+│   │       ├── health.py
+│   │       └── speech.py
+│   ├── core/
+│   ├── db/
+│   ├── schemas/
+│   │   └── nlp.py
+│   ├── services/
+│   │   └── clinical_nlp/
+│   └── utils/
+│
+└── frontend/
+    ├── react_app/
+    │   └── src/
+    │       ├── api/
+    │       ├── app/
+    │       ├── components/
+    │       ├── context/
+    │       ├── features/
+    │       ├── lib/
+    │       └── types/
+    └── streamlit_app/
+
 data/
 deployment/
 docs/
 ml/
 model_artifacts/
 model_registry/
-  esi_345_lightgbm_v2/
+└── esi_345_lightgbm_v2/
 notebooks/
-  FINAL_SOURCE_OF_TRUTH/
+└── FINAL_SOURCE_OF_TRUTH/
 reports/
-  generated/
+└── generated/
 scripts/
 tests/
-  backend/
-  frontend/
-  ml/
+├── backend/
+├── frontend/
+└── ml/
 ```
 
-This README shows the main project structure only. A detailed file-level architecture document can be added under docs/ as the project grows.
+This README shows the primary architecture rather than every repository file.
+
+---
 
 ## Local Setup
 
-Install Python dependencies:
+### 1. Clone the repository
 
 ```bash
-python -m venv .venv
+git clone https://github.com/chintan-02/triageai-esi-care-routing.git
+cd triageai-esi-care-routing
+```
+
+### 2. Create and activate a virtual environment
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
+```
+
+On Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+### 3. Install Python dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-Start the FastAPI backend:
+### 4. Start the FastAPI backend
 
 ```bash
-cd /Users/chintanpatel/Desktop/My/triageai-esi-care-routing
-source .venv/bin/activate
 python -m uvicorn app.backend.api.main:app --reload --port 8001
 ```
 
-Verify readiness:
+### 5. Verify health and readiness
 
 ```bash
+curl http://localhost:8001/health
 curl http://localhost:8001/ready | python -m json.tool
 ```
 
-Start the React frontend:
+### 6. Test the Clinical Intake NLP endpoint
+
+```bash
+curl -X POST "http://localhost:8001/nlp/extract-intake" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "note_text": "62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."
+  }' | python -m json.tool
+```
+
+### 7. Start the React frontend
 
 ```bash
 cd app/frontend/react_app
@@ -296,17 +596,19 @@ Open:
 http://localhost:5173
 ```
 
-API docs:
+API documentation:
 
 ```text
 http://localhost:8001/docs
 ```
 
-Legacy Streamlit frontend:
+### 8. Run the legacy Streamlit frontend
 
 ```bash
 streamlit run app/frontend/streamlit_app/Home.py
 ```
+
+---
 
 ## Environment Variables
 
@@ -326,46 +628,52 @@ VITE_USE_MOCK_AUTH=true
 VITE_API_BASE_URL=http://localhost:8001
 ```
 
-Use a PostgreSQL `DATABASE_URL` for Azure or other professional deployment environments.
+Use a PostgreSQL `DATABASE_URL` for a professional cloud deployment.
 
-## Demo Reset / Seed Workflow
+---
 
-For screenshot-ready local data:
+## Demo Reset and Seed Workflow
+
+For screenshot-ready local demonstration data:
 
 ```bash
 python scripts/reset_demo_data.py
 ```
 
-This command is for local demo SQLite data only. It backs up the existing SQLite database, clears demo workflow tables, seeds clean named cases, runs predictions through the backend model path, saves clinician review/audit records, and prepares backend PDF report records. Do not run it against production data.
+This script is intended for local SQLite demonstration data only. It can back up the existing local database, clear demonstration workflow tables, seed repeatable cases, run predictions through the backend model path, save clinician review and audit records, and prepare report records.
 
-The underlying configurable script is:
+Do not run the reset workflow against production data.
+
+The configurable command is:
 
 ```bash
 python scripts/demo_reset_seed.py --backup --reset --seed --yes
 ```
 
-Additional utility scripts:
+Additional utilities:
 
 ```bash
 python scripts/validate_model_registry.py
 python scripts/api_smoke_test.py --base-url http://127.0.0.1:8001
 ```
 
+---
+
 ## Testing
 
-Backend compile check:
+### Backend compile check
 
 ```bash
 python -m compileall app/backend
 ```
 
-Full Python test suite:
+### Python test suite
 
 ```bash
 python -m pytest
 ```
 
-React production build:
+### React production build
 
 ```bash
 cd app/frontend/react_app
@@ -378,89 +686,130 @@ Current test folders:
 - `tests/frontend/`
 - `tests/ml/`
 
-Current coverage includes health/readiness, prediction schema, safety rules, assessment database flows, clinician review, dashboard summary, reports/PDF generation, demo reset/seed safety, React/backend contract checks, frontend API client behavior, UI theme helpers, model artifacts, and feature builder behavior.
+Current coverage includes:
 
-## Example Demo Flow
+- health and readiness
+- NLP intake extraction
+- prediction schemas
+- safety rules
+- assessment persistence
+- clinician review
+- dashboard summaries
+- report and PDF generation
+- audit behavior
+- demo reset and seed safety
+- React and backend contract checks
+- frontend API-client behavior
+- UI helper behavior
+- model artifacts
+- feature-builder behavior
+
+---
+
+## Example Demonstration Flow
 
 1. Start the backend on port `8001`.
-2. Start React on port `5173`.
-3. Confirm the topbar shows backend connected / LightGBM V2.
-4. Create a new assessment through New Intake.
-5. Review the ESI prediction, safety gate, confidence, latency, and probability display.
-6. Accept or override the clinician review decision.
-7. Generate/download the backend PDF report.
-8. Open the Audit Trail page and confirm traceability events.
-9. Check Command Center dashboard counts and recent assessments.
+2. Test free-text extraction through `POST /nlp/extract-intake`.
+3. Review the extracted values, evidence, safety cues, and missing fields.
+4. Start the React frontend on port `5173`.
+5. Confirm the top bar shows backend connected and LightGBM V2 available.
+6. Create a new assessment through New Intake.
+7. Review the model prediction, safety escalation, confidence, latency, and probability display.
+8. Accept, override, or mark the assessment for further review.
+9. Generate or download the backend PDF report.
+10. Open the Audit Trail page and confirm traceability events.
+11. Check Command Center counts and recent assessments.
+
+---
 
 ## Screenshots
 
-Screenshots will be added after final demo data reset and screenshot capture.
+Final workflow screenshots will be added after the React NLP review integration and final demonstration-data reset.
 
-### Command Center
+Planned screenshot set:
 
-_Pending screenshot._
+- Command Center
+- New Assessment
+- Clinical Intake NLP review
+- Assessment Detail
+- Clinician Review
+- Reports and PDF
+- Audit Trail
+- Model Monitoring
 
-### New Assessment
+---
 
-_Pending screenshot._
+## Roadmap
 
-### Assessment Detail
+### Next
 
-_Pending screenshot._
+- Connect the Clinical Intake NLP endpoint to the React New Assessment workflow
+- Add clinician review and correction of extracted fields before prediction
+- Preserve raw note and reviewed structured fields in the audit workflow
+- Add clear extraction evidence and missing-information displays
+- Replace the placeholder speech route with real speech-to-text integration
+- Add final screenshot and demonstration documentation
 
-### Reports/PDF
-
-_Pending screenshot._
-
-### Audit Trail
-
-_Pending screenshot._
-
-### Model Monitoring
-
-_Pending screenshot._
-
-## Roadmap / Next Work
-
-Next:
-
-- NLP-assisted Clinical Intake Extraction
-  - free-text clinical note parsing
-  - symptom extraction
-  - duration extraction
-  - vitals extraction
-  - red-flag extraction
-  - clinician review/edit before prediction
-  - audit raw note and extracted fields
-
-Later:
+### Later
 
 - Azure PostgreSQL deployment
-- Azure App Service / container deployment
-- CI/CD
-- authentication/RBAC hardening
-- PDF storage in Azure Blob
-- monitoring/observability
+- Azure App Service or container deployment
+- CI/CD hardening
+- authentication and RBAC hardening
+- secure cloud secret management
+- PDF storage in Azure Blob Storage
+- monitoring and observability
 - model challenger experiments
-- ClinicalBERT/BioClinicalBERT research comparison only if metrics justify it
+- ClinicalBERT or BioClinicalBERT research comparison only if evaluation justifies it
 
-## Portfolio / Recruiter Notes
+---
 
-This project demonstrates:
+## Engineering Skills Demonstrated
 
-- applied ML model deployment
+This project demonstrates practical experience with:
+
+- applied machine-learning deployment
+- class-imbalanced multiclass evaluation
+- threshold-tuned LightGBM inference
+- model-registry integration
+- clinical-note information extraction
+- evidence-linked NLP outputs
 - FastAPI backend engineering
-- healthcare-safe workflow design
-- React frontend integration
-- model registry usage
-- data persistence
-- auditability
-- PDF reporting
-- human-in-the-loop AI system design
-- production-readiness thinking
+- React and TypeScript frontend integration
+- typed API contracts
+- SQLAlchemy persistence
+- human-in-the-loop decision support
+- transparent safety escalation
+- auditability and traceability
+- backend PDF generation
+- automated testing
+- deployment-readiness planning
+- responsible AI boundaries
+
+---
 
 ## Accuracy and Honesty
 
-All metrics listed are from the final selected LightGBM V2 evaluation artifacts. The project avoids unsupported claims and treats clinical safety, auditability, and human review as core requirements.
+All model metrics listed in this README come from the final selected LightGBM V2 evaluation artifacts.
 
-This is a clinical decision-support workflow demonstration. It is not diagnosis, does not replace clinician judgment, and is not intended for live clinical use without the validation and approvals described above.
+The project avoids unsupported clinical and technical claims. It treats human review, safety escalation, auditability, uncertainty through missing-information reporting, and transparent limitations as core system requirements.
+
+The Clinical Intake NLP Safety Layer is currently implemented as a backend endpoint. Its dedicated React review interface remains planned and is not represented as completed.
+
+---
+
+## Author
+
+**Chintan Patel**
+
+- [Portfolio](https://chintan-patel-ai.netlify.app/)
+- [LinkedIn](https://www.linkedin.com/in/chintan-patel-ai/)
+- [GitHub](https://github.com/chintan-02)
+
+---
+
+## License and Use
+
+This repository is intended for portfolio, educational, research, and software-engineering demonstration purposes.
+
+It is not intended for live clinical use without the validation, governance, security, privacy, and regulatory controls described in this README.
