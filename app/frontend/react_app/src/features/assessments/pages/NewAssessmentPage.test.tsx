@@ -3,8 +3,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NewAssessmentPage } from './NewAssessmentPage';
 
-const { createPrediction } = vi.hoisted(() => ({
-  createPrediction: vi.fn()
+const { createPrediction, extractClinicalIntake } = vi.hoisted(() => ({
+  createPrediction: vi.fn(),
+  extractClinicalIntake: vi.fn()
 }));
 const showToast = vi.fn();
 const mockNavigate = vi.fn();
@@ -21,12 +22,83 @@ vi.mock('@/api/predictions', () => ({
   createPrediction
 }));
 
+vi.mock('@/api/clinicalNlp', () => ({
+  extractClinicalIntake
+}));
+
 vi.mock('@/context/ToastContext', () => ({
   useToast: () => ({ showToast })
 }));
 
 describe('NewAssessmentPage', () => {
+  it('extracts clinical note fields for clinician review without running prediction', async () => {
+  render(
+    <MemoryRouter>
+      <NewAssessmentPage />
+    </MemoryRouter>
+  );
+
+  fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
+
+  const nextButton = screen.getByRole('button', { name: /next/i });
+  fireEvent.click(nextButton);
+
+  const note =
+    '62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2.';
+
+  fireEvent.change(screen.getByLabelText(/clinical note \/ transcript/i), {
+    target: { value: note }
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: /extract intake fields/i }));
+
+  await waitFor(() => {
+    expect(extractClinicalIntake).toHaveBeenCalledWith(note);
+  });
+
+  expect(screen.getByText(/clinical intake nlp safety layer/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/low oxygen/i).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/low blood pressure/i).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/respiratory rate/i).length).toBeGreaterThan(0);
+
+  fireEvent.click(screen.getByRole('button', { name: /patient/i }));
+
+  expect((screen.getByLabelText(/age/i) as HTMLInputElement).value).toBe('62');
+  expect((screen.getByLabelText(/sex/i) as HTMLSelectElement).value).toBe('Male');
+
+  fireEvent.click(screen.getByRole('button', { name: /complaint/i }));
+
+  expect((screen.getByLabelText(/chief complaint/i) as HTMLInputElement).value).toBe('chest pain');
+  expect((screen.getByLabelText(/symptom narrative/i) as HTMLTextAreaElement).value).toBe(note);
+
+  expect(createPrediction).not.toHaveBeenCalled();
+});
   beforeEach(() => {
+    extractClinicalIntake.mockReset();
+extractClinicalIntake.mockResolvedValue({
+  age: 62,
+  gender: 'Male',
+  chief_complaint: 'chest pain',
+  symptoms: ['chest pain', 'shortness of breath'],
+  vitals: {
+    hr: 118,
+    sbp: 92,
+    dbp: 60,
+    rr: null,
+    o2: 91,
+    temp: 38.2
+  },
+  safety_cues: ['chest pain', 'shortness of breath', 'low oxygen', 'low blood pressure', 'tachycardia'],
+  missing_fields: ['respiratory rate'],
+  evidence: [
+    { field: 'age', value: 62, text: '62-year-old' },
+    { field: 'triage_vital_hr', value: 118, text: 'HR 118' },
+    { field: 'triage_vital_sbp', value: 92, text: 'BP 92/60' },
+    { field: 'triage_vital_o2', value: 91, text: 'O2 91%' }
+  ],
+  requires_clinician_review: true,
+  disclaimer: 'Decision support only. Extracted fields require clinician review before prediction.'
+});
     createPrediction.mockReset();
     showToast.mockReset();
     mockNavigate.mockReset();
