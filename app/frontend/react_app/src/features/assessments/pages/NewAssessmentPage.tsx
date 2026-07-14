@@ -38,6 +38,9 @@ const defaultVitals: Vitals = {
   painScore: 3
 };
 
+const CLINICAL_NLP_DEMO_NOTE =
+  '62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2. Patient looks pale and dizzy.';
+
 function createDefaultVitals(): Vitals {
   return { ...defaultVitals };
 }
@@ -189,6 +192,13 @@ export function NewAssessmentPage() {
 
   const preventImplicitSubmit = (event: FormEvent) => {
     event.preventDefault();
+  };
+
+  const handleUseDemoNote = () => {
+    setClinicalNote(CLINICAL_NLP_DEMO_NOTE);
+    setNlpExtraction(null);
+    setIsNlpReviewed(false);
+    setNlpError(null);
   };
   
   const handleExtractClinicalNote = async () => {
@@ -408,6 +418,21 @@ export function NewAssessmentPage() {
       placeholder="Example: 62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."
     />
   </label>
+
+  <div className="mt-2 w-fit">
+    <Button
+      type="button"
+      variant="secondary"
+      className="px-3 py-2 text-xs"
+      disabled={isExtractingNlp}
+      onClick={handleUseDemoNote}
+    >
+      Use demo note
+    </Button>
+    <p className="mt-1 text-[11px] font-semibold text-blue-800">
+      Demo note is for workflow testing only.
+    </p>
+  </div>
 
   <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
     <p className="text-xs font-semibold leading-5 text-blue-900">
