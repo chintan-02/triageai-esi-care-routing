@@ -198,6 +198,77 @@ extractClinicalIntake.mockResolvedValue({
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/assessments/AS-100'));
   });
 
+  it('submits reviewed NLP audit metadata without the raw clinical note', async () => {
+    render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+
+    const rawClinicalNote =
+      '62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2.';
+    fireEvent.change(screen.getByLabelText(/clinical note \/ transcript/i), {
+      target: { value: rawClinicalNote }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /extract intake fields/i }));
+
+    await screen.findByText(/clinical intake nlp safety layer/i);
+    fireEvent.change(screen.getByLabelText(/duration/i), { target: { value: '2 hours' } });
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /i reviewed the extracted fields before prediction/i
+      })
+    );
+
+    const nextButton = screen.getByRole('button', { name: /next/i });
+    fireEvent.click(nextButton);
+    fireEvent.click(nextButton);
+    fireEvent.click(nextButton);
+    fireEvent.click(screen.getByRole('button', { name: /run esi decision support/i }));
+
+    await waitFor(() => expect(createPrediction).toHaveBeenCalledTimes(1));
+    const submittedPayload = createPrediction.mock.calls[0][0];
+    expect(submittedPayload.nlp_extraction_audit).toEqual({
+      reviewed: true,
+      source: 'clinical_intake_nlp',
+      extracted_fields: {
+        age: 62,
+        gender: 'Male',
+        chief_complaint: 'chest pain',
+        symptoms: ['chest pain', 'shortness of breath'],
+        vitals: {
+          hr: 118,
+          sbp: 92,
+          dbp: 60,
+          rr: null,
+          o2: 91,
+          temp: 38.2
+        }
+      },
+      safety_cues: [
+        'chest pain',
+        'shortness of breath',
+        'low oxygen',
+        'low blood pressure',
+        'tachycardia'
+      ],
+      missing_fields: ['respiratory rate'],
+      evidence: [
+        { field: 'age', value: 62, text: '62-year-old' },
+        { field: 'triage_vital_hr', value: 118, text: 'HR 118' },
+        { field: 'triage_vital_sbp', value: 92, text: 'BP 92/60' },
+        { field: 'triage_vital_o2', value: 91, text: 'O2 91%' }
+      ],
+      disclaimer: 'Decision support only. Extracted fields require clinician review before prediction.'
+    });
+    expect(submittedPayload.nlp_extraction_audit).not.toHaveProperty('clinical_note');
+    expect(submittedPayload.nlp_extraction_audit).not.toHaveProperty('note_text');
+    expect(JSON.stringify(submittedPayload.nlp_extraction_audit)).not.toContain(rawClinicalNote);
+  });
+
   it('prevents duplicate decision-support runs while submission is pending', async () => {
     let resolvePrediction: (value: { assessment_id: string; final_esi: number }) => void = () => undefined;
     createPrediction.mockReturnValueOnce(

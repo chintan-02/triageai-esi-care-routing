@@ -16,7 +16,7 @@ from app.backend.db.models import (
     Report,
 )
 from app.backend.schemas.clinician_review import ClinicianReviewRequest
-from app.backend.schemas.intake import PatientIntakeRequest
+from app.backend.schemas.intake import NlpExtractionAudit, PatientIntakeRequest
 from app.backend.schemas.prediction import ESIPredictionResponse
 from app.backend.schemas.report import ReportRequest
 
@@ -194,6 +194,51 @@ def create_audit_log(
     db.commit()
     db.refresh(audit_log)
     return audit_log
+
+
+_UNSAFE_NLP_AUDIT_KEYS = {
+    "diagnosis",
+    "treatment",
+    "treatment_recommendation",
+    "predicted_esi",
+    "final_esi",
+    "clinical_note",
+    "note_text",
+    "raw_note",
+    "transcript",
+}
+
+
+def _strip_unsafe_nlp_audit_keys(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _strip_unsafe_nlp_audit_keys(item)
+            for key, item in value.items()
+            if str(key).lower() not in _UNSAFE_NLP_AUDIT_KEYS
+        }
+    if isinstance(value, list):
+        return [_strip_unsafe_nlp_audit_keys(item) for item in value]
+    return value
+
+
+def create_nlp_extraction_audit_log(
+    db: Session,
+    assessment_id: str,
+    nlp_extraction_audit: NlpExtractionAudit,
+) -> AuditLog:
+    details = _strip_unsafe_nlp_audit_keys(
+        nlp_extraction_audit.model_dump(mode="json")
+    )
+    details["message"] = (
+        "Clinical NLP extraction reviewed before ESI decision support."
+    )
+    return create_audit_log(
+        db=db,
+        assessment_id=assessment_id,
+        actor_id="clinical_nlp_review_ui",
+        action="nlp_extraction_reviewed",
+        details=details,
+    )
 
 
 def create_report_record(db: Session, report_request: ReportRequest) -> Report:

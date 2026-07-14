@@ -31,6 +31,22 @@ export interface ReadyResponse {
   timestamp: string;
 }
 
+export interface NlpEvidenceItem {
+  field: string;
+  value: number | string | string[] | null;
+  text: string;
+}
+
+export interface NlpExtractionAuditPayload {
+  reviewed: boolean;
+  source: string;
+  extracted_fields: Record<string, unknown>;
+  safety_cues: string[];
+  missing_fields: string[];
+  evidence: NlpEvidenceItem[];
+  disclaimer: string;
+}
+
 export interface PatientIntakePayload {
   patient_name?: string | null;
   mrn?: string | null;
@@ -49,6 +65,7 @@ export interface PatientIntakePayload {
   pregnancy?: boolean | null;
   arrival_mode?: string | null;
   additional_context?: string | null;
+  nlp_extraction_audit?: NlpExtractionAuditPayload;
 }
 
 export interface SafetyRuleResult {

@@ -5,7 +5,7 @@ import { createPrediction } from '@/api/predictions';
 import { useToast } from '@/context/ToastContext';
 import { comorbidityOptions, riskFlagOptions } from '@/data/mockData';
 import type { PatientProfile, Vitals } from '@/types/clinical';
-import type { PatientIntakePayload } from '@/types/api';
+import type { NlpExtractionAuditPayload, PatientIntakePayload } from '@/types/api';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { VitalsGrid } from '@/components/clinical/VitalsGrid';
@@ -69,7 +69,8 @@ function buildPredictionPayload(
   chiefComplaint: string,
   symptomText: string,
   duration: string,
-  vitals: Vitals
+  vitals: Vitals,
+  nlpExtractionAudit?: NlpExtractionAuditPayload
 ): PatientIntakePayload {
   return {
     patient_name: toNullableText(patient.name),
@@ -86,7 +87,28 @@ function buildPredictionPayload(
     diastolic_bp: vitals.diastolicBp,
     oxygen_saturation: vitals.spo2,
     arrival_mode: patient.arrivalMode,
-    additional_context: toNullableText(symptomText)
+    additional_context: toNullableText(symptomText),
+    ...(nlpExtractionAudit ? { nlp_extraction_audit: nlpExtractionAudit } : {})
+  };
+}
+
+function buildNlpExtractionAudit(
+  extraction: ClinicalIntakeExtractionResponse
+): NlpExtractionAuditPayload {
+  return {
+    reviewed: true,
+    source: 'clinical_intake_nlp',
+    extracted_fields: {
+      age: extraction.age,
+      gender: extraction.gender,
+      chief_complaint: extraction.chief_complaint,
+      symptoms: extraction.symptoms,
+      vitals: extraction.vitals
+    },
+    safety_cues: extraction.safety_cues,
+    missing_fields: extraction.missing_fields,
+    evidence: extraction.evidence,
+    disclaimer: extraction.disclaimer
   };
 }
 
@@ -232,7 +254,18 @@ export function NewAssessmentPage() {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      const payload = buildPredictionPayload(patient, chiefComplaint, symptomText, duration, vitals);
+      const nlpExtractionAudit =
+        nlpExtraction && isNlpReviewed
+          ? buildNlpExtractionAudit(nlpExtraction)
+          : undefined;
+      const payload = buildPredictionPayload(
+        patient,
+        chiefComplaint,
+        symptomText,
+        duration,
+        vitals,
+        nlpExtractionAudit
+      );
       const prediction = await createPrediction(payload);
       if (!prediction.assessment_id) {
         throw new Error('Prediction completed, but the backend did not return an assessment ID.');

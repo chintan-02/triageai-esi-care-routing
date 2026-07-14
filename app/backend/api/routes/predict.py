@@ -19,6 +19,12 @@ def predict_esi(
     db: Session = Depends(get_db),
 ) -> ESIPredictionResponse:
     assessment = repositories.create_assessment(db, intake)
+    if intake.nlp_extraction_audit and intake.nlp_extraction_audit.reviewed:
+        repositories.create_nlp_extraction_audit_log(
+            db,
+            assessment.id,
+            intake.nlp_extraction_audit,
+        )
     started_at = perf_counter()
     response = predict_esi_for_intake(intake)
     response.latency_ms = max(0, round((perf_counter() - started_at) * 1000))
