@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, ClipboardCheck, Loader2, UserRound } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardCheck, FileText, Loader2, Sparkles, UserRound } from 'lucide-react';
 import { createPrediction } from '@/api/predictions';
 import { useToast } from '@/context/ToastContext';
 import { comorbidityOptions, riskFlagOptions } from '@/data/mockData';
@@ -12,6 +12,9 @@ import { VitalsGrid } from '@/components/clinical/VitalsGrid';
 import { VitalSliderPanel } from '@/components/clinical/VitalSliderPanel';
 import { vitalFlag } from '@/lib/vitals';
 import { getMissingIntakeFields } from '@/lib/intakeValidation';
+import { extractClinicalIntake } from '@/api/clinicalNlp';
+import { ClinicalNlpReviewPanel } from '@/components/clinical-nlp/ClinicalNlpReviewPanel';
+import type { ClinicalIntakeExtractionResponse } from '@/types/clinicalNlp';
 
 function createDefaultPatient(): PatientProfile {
   const entropy = `${Date.now().toString().slice(-5)}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
@@ -95,6 +98,11 @@ export function NewAssessmentPage() {
   const [chiefComplaint, setChiefComplaint] = useState('');
   const [symptomText, setSymptomText] = useState('');
   const [duration, setDuration] = useState('');
+  const [clinicalNote, setClinicalNote] = useState('');
+  const [nlpExtraction, setNlpExtraction] = useState<ClinicalIntakeExtractionResponse | null>(null);
+  const [isExtractingNlp, setIsExtractingNlp] = useState(false);
+  const [nlpError, setNlpError] = useState<string | null>(null);
+  const [isNlpReviewed, setIsNlpReviewed] = useState(false);
   const [vitals, setVitals] = useState<Vitals>(() => createDefaultVitals());
   const [riskFlags, setRiskFlags] = useState<string[]>([]);
   const [comorbidities, setComorbidities] = useState<string[]>([]);
@@ -107,6 +115,7 @@ export function NewAssessmentPage() {
     [patient, chiefComplaint, symptomText, duration]
   );
 
+  const needsNlpReview = Boolean(nlpExtraction && !isNlpReviewed);
   const stepErrors = useMemo<Record<StepId, string[]>>(
     () => ({
       patient: patient.name.trim() ? [] : ['Patient name is required'],
@@ -117,9 +126,12 @@ export function NewAssessmentPage() {
       ].filter(Boolean),
       vitals: [],
       risks: [],
-      review: missingFields
+      review: [
+      ...missingFields,
+      ...(needsNlpReview ? ['Review NLP extracted fields before prediction'] : [])
+    ]
     }),
-    [chiefComplaint, duration, missingFields, patient.name, symptomText]
+    [chiefComplaint, duration, missingFields, needsNlpReview, patient.name, symptomText]
   );
 
   const abnormalVitalCount = useMemo(
@@ -156,9 +168,67 @@ export function NewAssessmentPage() {
   const preventImplicitSubmit = (event: FormEvent) => {
     event.preventDefault();
   };
+  
+  const handleExtractClinicalNote = async () => {
+  const note = clinicalNote.trim();
+
+  if (!note || isExtractingNlp) return;
+
+  setIsExtractingNlp(true);
+  setNlpError(null);
+  setIsNlpReviewed(false);
+
+  try {
+    const extraction = await extractClinicalIntake(note);
+    setNlpExtraction(extraction);
+
+    setPatient((current) => ({
+      ...current,
+      age: extraction.age ?? current.age,
+      sex: extraction.gender
+        ? (extraction.gender as PatientProfile['sex'])
+        : current.sex
+    }));
+
+    if (extraction.chief_complaint) {
+      setChiefComplaint(extraction.chief_complaint);
+    }
+
+    if (extraction.symptoms.length) {
+      setSymptomText(note);
+    }
+
+    setVitals((current) => ({
+      ...current,
+      heartRate: extraction.vitals.hr ?? current.heartRate,
+      respiratoryRate: extraction.vitals.rr ?? current.respiratoryRate,
+      systolicBp: extraction.vitals.sbp ?? current.systolicBp,
+      diastolicBp: extraction.vitals.dbp ?? current.diastolicBp,
+      temperatureC: extraction.vitals.temp ?? current.temperatureC,
+      spo2: extraction.vitals.o2 ?? current.spo2
+    }));
+
+    showToast({
+      tone: 'success',
+      title: 'Intake fields extracted',
+      description: 'Review and edit the extracted fields before running ESI decision support.'
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not extract clinical intake fields.';
+    setNlpError(message);
+    showToast({
+      tone: 'error',
+      title: 'Clinical NLP extraction failed',
+      description: message
+    });
+  } finally {
+    setIsExtractingNlp(false);
+  }
+};
+  
 
   const handleRunDecisionSupport = async () => {
-    if (missingFields.length || isSubmitting) return;
+    if (missingFields.length || needsNlpReview || isSubmitting) return;
     setIsSubmitting(true);
     setSubmitError(null);
     try {
@@ -280,6 +350,63 @@ export function NewAssessmentPage() {
                   <p className="mt-1 text-sm text-slate-600">Capture the chief complaint and symptom narrative concisely.</p>
                 </div>
                 <div className="grid gap-3">
+                <div className="rounded-[1.2rem] border border-blue-100 bg-blue-50/70 p-3">
+  <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+    <div>
+      <div className="flex items-center gap-2 text-sm font-black text-blue-950">
+        <FileText size={18} />
+        Clinical note extraction
+      </div>
+      <p className="mt-1 text-sm leading-6 text-blue-900">
+        Paste a clinician note or transcript to extract structured intake fields for review. This is not diagnosis and does not auto-run prediction.
+      </p>
+    </div>
+    <Badge className="border-blue-200 bg-white text-blue-800">
+      Optional assistant
+    </Badge>
+  </div>
+
+  <label className="flex flex-col gap-1.5 text-sm font-semibold text-slate-700">
+    Clinical note / transcript
+    <textarea
+      value={clinicalNote}
+      onChange={(event) => setClinicalNote(event.target.value)}
+      className="focus-ring min-h-[112px] resize-y rounded-2xl border border-blue-100 bg-white px-3.5 py-2.5"
+      placeholder="Example: 62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."
+    />
+  </label>
+
+  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <p className="text-xs font-semibold leading-5 text-blue-900">
+      Extracted values are copied into editable fields below. Clinician review is required before prediction.
+    </p>
+    <Button
+      type="button"
+      variant="secondary"
+      disabled={!clinicalNote.trim() || isExtractingNlp}
+      onClick={handleExtractClinicalNote}
+    >
+      {isExtractingNlp ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
+      Extract Intake Fields
+    </Button>
+  </div>
+
+  {nlpError ? (
+    <div className="mt-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">
+      {nlpError}
+    </div>
+  ) : null}
+
+  {nlpExtraction ? (
+    <div className="mt-3">
+      <ClinicalNlpReviewPanel
+        extraction={nlpExtraction}
+        isReviewed={isNlpReviewed}
+        onReviewedChange={setIsNlpReviewed}
+      />
+    </div>
+  ) : null}
+</div>
                   <label className={fieldClass}>
                     Chief complaint
                     <input value={chiefComplaint} onChange={(event) => setChiefComplaint(event.target.value)} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5" placeholder="Example: chest pain and shortness of breath" />
@@ -424,6 +551,18 @@ export function NewAssessmentPage() {
                     {submitError}
                   </div>
                 ) : null}
+
+                {needsNlpReview ? (
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                <div className="flex items-center gap-2 font-black">
+                  <ClipboardCheck size={18} />
+                  NLP extraction review required
+                </div>
+                <p className="mt-1 text-blue-800">
+                  Review the extracted fields in the complaint step before running ESI decision support.
+                </p>
+              </div>
+            ) : null}
               </div>
             ) : null}
           </div>
@@ -437,7 +576,7 @@ export function NewAssessmentPage() {
                 Next
               </Button>
             ) : (
-              <Button type="button" disabled={isSubmitting || missingFields.length > 0} onClick={handleRunDecisionSupport}>
+              <Button type="button" disabled={isSubmitting || missingFields.length > 0 || needsNlpReview} onClick={handleRunDecisionSupport}>
                 {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : null}
                 Run ESI Decision Support
               </Button>
