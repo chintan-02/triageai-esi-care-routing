@@ -32,8 +32,8 @@ from app.backend.db.models import Assessment, AuditLog, ClinicianReview, Predict
 
 REPORT_DISCLAIMER = (
     "This report supports structured triage review and ESI care routing. It is "
-    "decision-support only, is not a diagnosis, and does not replace clinician "
-    "judgment, emergency protocols, or required clinician review."
+    "decision-support only and does not replace clinician judgment, emergency "
+    "protocols, or required clinician review."
 )
 
 MODEL_VS_CLINICIAN_NOTE = (
@@ -69,6 +69,7 @@ VALUE_LABELS = {
     "clinician_review_accept": "Clinician review accepted",
     "clinician_review_override": "Clinician review override",
     "clinician_review_needs_review": "Clinician marked needs review",
+    "nlp_extraction_reviewed": "Clinical NLP extraction reviewed",
     "pending_review": "Pending review",
     "needs_review": "Needs review",
     "review_completed": "Review completed",
@@ -84,6 +85,20 @@ AMBER_SOFT = colors.HexColor("#FFF7ED")
 RED_SOFT = colors.HexColor("#FEF2F2")
 GREEN_SOFT = colors.HexColor("#ECFDF5")
 GREEN = colors.HexColor("#047857")
+
+NLP_EVIDENCE_FIELDS = {
+    "age",
+    "gender",
+    "chief_complaint",
+    "symptom",
+    "symptoms",
+    "triage_vital_hr",
+    "triage_vital_sbp",
+    "triage_vital_dbp",
+    "triage_vital_rr",
+    "triage_vital_o2",
+    "triage_vital_temp",
+}
 
 ESI_COLORS = {
     1: colors.HexColor("#7F1D1D"),
@@ -129,7 +144,7 @@ class HeaderBand(Flowable):
         canvas.drawString(18, 63, "Clinical ESI Routing Summary")
         canvas.setFillColor(colors.HexColor("#D9E7F5"))
         canvas.setFont("Helvetica", 9.5)
-        canvas.drawString(18, 45, "Human-in-the-loop ESI care routing report - not a diagnostic tool")
+        canvas.drawString(18, 45, "Human-in-the-loop ESI care routing report - decision-support only")
         canvas.setFillColor(colors.HexColor("#BED0E3"))
         canvas.setFont("Helvetica", 8.1)
         canvas.drawString(18, 25, f"Assessment ID: {_display(self.assessment.id)}")
@@ -268,11 +283,24 @@ def generate_assessment_report_pdf(
     _add_header(story, styles, assessment, prediction, clinician_review, content_width, generated_at)
     _add_final_decision(story, styles, assessment, prediction, clinician_review, content_width)
     _add_model_metadata(story, styles, assessment, prediction, content_width)
-    _add_patient_snapshot(story, styles, assessment, prediction, content_width)
+    _add_patient_snapshot(
+        story,
+        styles,
+        assessment,
+        prediction,
+        content_width,
+        include_symptom_narrative=_nlp_review_details(audit_logs) is None,
+    )
     _add_vitals_table(story, styles, assessment, content_width)
     story.append(PageBreak())
     _add_model_and_safety_columns(story, styles, prediction, content_width)
     _add_clinician_review(story, styles, prediction, clinician_review, content_width)
+    _add_clinical_nlp_review_evidence(
+        story,
+        styles,
+        audit_logs,
+        content_width,
+    )
     if include_audit:
         _add_audit_trail(
             story,
@@ -580,7 +608,24 @@ def _add_patient_snapshot(
     assessment: Assessment,
     prediction: Prediction | None,
     content_width: float,
+    include_symptom_narrative: bool = True,
 ) -> None:
+    intake_rows = [
+        ("Patient", _patient_summary(assessment)),
+        ("MRN", _patient_mrn(assessment)),
+        ("Arrival Mode", assessment.arrival_mode),
+        ("Chief Complaint", assessment.chief_complaint),
+    ]
+    if include_symptom_narrative:
+        intake_rows.append(("Symptom Narrative", assessment.additional_context))
+    intake_rows.extend(
+        [
+            ("Duration", assessment.symptom_duration),
+            ("Selected risk flags", _risk_flags_text(prediction)),
+            ("Comorbidities", "None selected"),
+            ("Consciousness level", assessment.consciousness_level),
+        ]
+    )
     story.append(
         KeepTogether(
             [
@@ -588,17 +633,7 @@ def _add_patient_snapshot(
                 _key_value_table(
                     styles,
                     content_width,
-                    [
-                        ("Patient", _patient_summary(assessment)),
-                        ("MRN", _patient_mrn(assessment)),
-                        ("Arrival Mode", assessment.arrival_mode),
-                        ("Chief Complaint", assessment.chief_complaint),
-                        ("Symptom Narrative", assessment.additional_context),
-                        ("Duration", assessment.symptom_duration),
-                        ("Selected risk flags", _risk_flags_text(prediction)),
-                        ("Comorbidities", "None selected"),
-                        ("Consciousness level", assessment.consciousness_level),
-                    ],
+                    intake_rows,
                 ),
             ]
         )
@@ -752,7 +787,7 @@ def _add_model_and_safety_columns(
                     [Paragraph("Signal", styles["table_header"]), Paragraph("Value", styles["table_header"])],
                     [Paragraph("Rules Fired", styles["value_bold"]), Paragraph(_safe(_rules_fired_text(prediction)), styles["value"])],
                     [Paragraph("Safety Gate Result", styles["value_bold"]), Paragraph(_safe(_safety_gate_result_text(prediction)), styles["value"])],
-                    [Paragraph("Explanation", styles["value_bold"]), Paragraph(_safe(_short_text(prediction.explanation, 360)), styles["value"])],
+                    [Paragraph("Explanation", styles["value_bold"]), Paragraph(_safe(_short_text(_pdf_explanation_text(prediction.explanation), 360)), styles["value"])],
                     [Paragraph("Recommendation", styles["value_bold"]), Paragraph(_safe(_short_text(prediction.recommendation, 220)), styles["value"])],
                 ],
                 [column_width * 0.30, column_width * 0.70],
@@ -822,7 +857,7 @@ def _add_safety_rules_and_recommendation(
             Spacer(1, 6),
             _note_box(styles, content_width, "Recommendation", prediction.recommendation),
             Spacer(1, 5),
-            _note_box(styles, content_width, "Clinical explanation", prediction.explanation),
+            _note_box(styles, content_width, "Clinical explanation", _pdf_explanation_text(prediction.explanation)),
             Spacer(1, 5),
             _note_box(styles, content_width, "Clinician summary", prediction.clinician_summary),
         ]
@@ -901,6 +936,223 @@ def _add_clinician_review(
     story.append(KeepTogether(section))
 
 
+def _nlp_review_details(audit_logs: list[AuditLog]) -> dict[str, Any] | None:
+    for audit_log in reversed(audit_logs):
+        if audit_log.action != "nlp_extraction_reviewed":
+            continue
+        details = _json_or_default(audit_log.details_json, None)
+        if not isinstance(details, dict):
+            return {}
+        payload = details.get("payload")
+        if isinstance(payload, dict):
+            return {**details, **payload}
+        return details
+    return None
+
+
+def _nlp_text(value: Any) -> str | None:
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return None
+
+
+def _nlp_text_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [text for item in value if (text := _nlp_text(item)) is not None]
+
+
+def _nlp_vitals_text(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return None
+
+    systolic = _nlp_text(value.get("sbp"))
+    diastolic = _nlp_text(value.get("dbp"))
+    blood_pressure = (
+        f"{systolic or '-'}/{diastolic or '-'}"
+        if systolic is not None or diastolic is not None
+        else None
+    )
+    vital_values = [
+        ("HR", _nlp_text(value.get("hr"))),
+        ("BP", blood_pressure),
+        ("RR", _nlp_text(value.get("rr"))),
+        ("O2", _nlp_text(value.get("o2"))),
+        ("Temp", _nlp_text(value.get("temp"))),
+    ]
+    rendered = [f"{label}: {reading}" for label, reading in vital_values if reading]
+    return "; ".join(rendered) or None
+
+
+def _nlp_extracted_field_rows(details: dict[str, Any]) -> list[tuple[str, str]]:
+    extracted_fields = details.get("extracted_fields")
+    if not isinstance(extracted_fields, dict):
+        return []
+
+    symptoms = _nlp_text_list(extracted_fields.get("symptoms"))
+    candidates = [
+        ("Age", _nlp_text(extracted_fields.get("age"))),
+        ("Gender", _nlp_text(extracted_fields.get("gender"))),
+        ("Chief complaint", _nlp_text(extracted_fields.get("chief_complaint"))),
+        ("Symptoms", "; ".join(symptoms) or None),
+        ("Vitals", _nlp_vitals_text(extracted_fields.get("vitals"))),
+    ]
+    return [(label, value) for label, value in candidates if value]
+
+
+def _nlp_evidence_rows(details: dict[str, Any]) -> list[tuple[str, str, str]]:
+    evidence = details.get("evidence")
+    if not isinstance(evidence, list):
+        return []
+
+    rows: list[tuple[str, str, str]] = []
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        field = _nlp_text(item.get("field"))
+        value = _nlp_text(item.get("value"))
+        if value is None and isinstance(item.get("value"), list):
+            value = "; ".join(_nlp_text_list(item.get("value"))) or None
+        snippet = _nlp_text(item.get("text"))
+        if not field or field not in NLP_EVIDENCE_FIELDS or not value or not snippet:
+            continue
+        rows.append(
+            (
+                _nlp_evidence_field_label(field),
+                _short_text(value, 100),
+                _short_text(snippet, 240),
+            )
+        )
+    return rows
+
+
+def _nlp_evidence_field_label(field: str) -> str:
+    labels = {
+        "age": "Age",
+        "gender": "Gender",
+        "chief_complaint": "Chief complaint",
+        "symptom": "Symptom",
+        "symptoms": "Symptoms",
+        "triage_vital_hr": "HR",
+        "triage_vital_sbp": "Systolic BP",
+        "triage_vital_dbp": "Diastolic BP",
+        "triage_vital_rr": "RR",
+        "triage_vital_o2": "O2",
+        "triage_vital_temp": "Temperature",
+    }
+    return labels[field]
+
+
+def _add_clinical_nlp_review_evidence(
+    story: list[Any],
+    styles: dict[str, ParagraphStyle],
+    audit_logs: list[AuditLog],
+    content_width: float,
+) -> None:
+    details = _nlp_review_details(audit_logs)
+    if details is None:
+        return
+
+    story.append(Paragraph("Clinical NLP Review Evidence", styles["section"]))
+    story.append(
+        _status_box(
+            styles,
+            content_width,
+            "Reviewed before prediction",
+            GREEN_SOFT,
+            GREEN,
+        )
+    )
+
+    message = _nlp_text(details.get("message"))
+    if message:
+        story.extend(
+            [
+                Spacer(1, 5),
+                Paragraph(_safe(_short_text(message, 320)), styles["body"]),
+            ]
+        )
+
+    context_rows: list[tuple[str, str]] = []
+    safety_cues = _nlp_text_list(details.get("safety_cues"))
+    missing_fields = _nlp_text_list(details.get("missing_fields"))
+    if safety_cues:
+        context_rows.append(("Safety cues", "; ".join(safety_cues)))
+    if missing_fields:
+        context_rows.append(("Missing fields", "; ".join(missing_fields)))
+    if context_rows:
+        story.extend(
+            [
+                Spacer(1, 5),
+                _key_value_table(styles, content_width, context_rows),
+            ]
+        )
+
+    extracted_rows = _nlp_extracted_field_rows(details)
+    if extracted_rows:
+        story.extend(
+            [
+                Spacer(1, 6),
+                Paragraph("Extracted fields", styles["value_bold"]),
+                Spacer(1, 3),
+                _key_value_table(styles, content_width, extracted_rows),
+            ]
+        )
+
+    evidence_rows = _nlp_evidence_rows(details)
+    if evidence_rows:
+        table_rows = [
+            [
+                Paragraph("Field", styles["table_header"]),
+                Paragraph("Value", styles["table_header"]),
+                Paragraph("Text snippet", styles["table_header"]),
+            ],
+            *[
+                [
+                    Paragraph(_safe(field), styles["value_bold"]),
+                    Paragraph(_safe(value), styles["value"]),
+                    Paragraph(_safe(snippet), styles["value"]),
+                ]
+                for field, value, snippet in evidence_rows
+            ],
+        ]
+        story.extend(
+            [
+                Spacer(1, 6),
+                Paragraph("Evidence snippets", styles["value_bold"]),
+                Spacer(1, 3),
+                _standard_table(
+                    table_rows,
+                    [content_width * 0.22, content_width * 0.20, content_width * 0.58],
+                    long=True,
+                ),
+            ]
+        )
+
+    disclaimer = _nlp_text(details.get("disclaimer"))
+    if disclaimer:
+        story.extend(
+            [
+                Spacer(1, 6),
+                Paragraph(_safe(_short_text(disclaimer, 420)), styles["disclaimer"]),
+            ]
+        )
+    story.extend(
+        [
+            Paragraph(
+                "Decision-support audit context only. Clinician review remains required.",
+                styles["body"],
+            ),
+            Spacer(1, 6),
+        ]
+    )
+
+
 def _add_audit_trail(
     story: list[Any],
     styles: dict[str, ParagraphStyle],
@@ -962,12 +1214,15 @@ def _add_audit_trail(
             )
         )
     for audit_log in audit_logs:
+        details = _json_or_default(audit_log.details_json, None)
+        if audit_log.action == "nlp_extraction_reviewed":
+            details = {"status": "Reviewed before prediction"}
         events.append(
             (
                 audit_log.created_at,
                 _readable_value(audit_log.action),
                 audit_log.actor_id,
-                _json_or_default(audit_log.details_json, None),
+                details,
             )
         )
 
@@ -1399,7 +1654,7 @@ def _footer(canvas: Any, document: SimpleDocTemplate) -> None:
     canvas.drawString(
         document.leftMargin,
         footer_y,
-        "This report supports structured triage review, is not diagnosis, and does not replace clinician judgment or emergency protocols.",
+        "This report supports structured triage review and does not replace clinician judgment or emergency protocols.",
     )
     canvas.drawRightString(page_width - document.rightMargin, footer_y, f"Page {document.page}")
     canvas.restoreState()
@@ -1428,6 +1683,13 @@ def _short_text(value: str, max_length: int) -> str:
     if len(value) <= max_length:
         return value
     return f"{value[: max_length - 1].rstrip()}..."
+
+
+def _pdf_explanation_text(value: str) -> str:
+    return value.replace(
+        "is not a diagnosis or a substitute for clinician judgment",
+        "does not replace clinician judgment",
+    )
 
 
 def _readable_detail_lines(payload: dict[str, Any]) -> list[str]:
