@@ -5,7 +5,7 @@ import { downloadAssessmentPdf, getAssessment } from '@/api/assessments';
 import { submitClinicianReview } from '@/api/reviews';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import type { AssessmentDetail } from '@/types/api';
+import type { AssessmentAuditEvent, AssessmentDetail } from '@/types/api';
 import type { AssessmentRecord, AuditEvent, ClinicianReview, EsiLevel, PatientProfile, ReviewStatus, RiskSeverity, RuleHit, Vitals } from '@/types/clinical';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
@@ -18,6 +18,7 @@ import { ProbabilityBars } from '@/components/clinical/ProbabilityBars';
 import { ReviewStatusBadge } from '@/components/clinical/ReviewStatusBadge';
 import { RiskRuleList } from '@/components/clinical/RiskRuleList';
 import { VitalsGrid } from '@/components/clinical/VitalsGrid';
+import { ClinicalNlpAuditEvidenceCard } from '@/components/clinical-nlp/ClinicalNlpAuditEvidenceCard';
 import { formatDateTime, formatPercent } from '@/lib/formatters';
 import { hasPermission } from '@/lib/permissions';
 
@@ -270,7 +271,12 @@ function mapRuleHits(detail: AssessmentDetail): RuleHit[] {
     });
 }
 
-function mapAuditTrail(detail: AssessmentDetail): AuditEvent[] {
+type AuditEventWithRaw = AuditEvent & { rawEvent: AssessmentAuditEvent };
+type AssessmentRecordWithRawAudit = Omit<AssessmentRecord, 'auditTrail'> & {
+  auditTrail: AuditEventWithRaw[];
+};
+
+function mapAuditTrail(detail: AssessmentDetail): AuditEventWithRaw[] {
   return detail.audit_trail.map((event) => ({
     id: event.audit_id,
     timestamp: textOrFallback(event.timestamp ?? event.created_at, detail.created_at ?? new Date().toISOString()),
@@ -278,7 +284,8 @@ function mapAuditTrail(detail: AssessmentDetail): AuditEvent[] {
     action: auditActionTitle(event.action),
     details: auditMessage(event.action, event.details, event.message),
     metadata: compactAuditMetadata(event.action, event.details),
-    severity: event.action.toLowerCase().includes('override') ? 'warning' : 'info'
+    severity: event.action.toLowerCase().includes('override') ? 'warning' : 'info',
+    rawEvent: event
   }));
 }
 
@@ -286,7 +293,7 @@ function modelFamilyFromVersion(version: string): string {
   return version.toLowerCase().includes('lightgbm') ? 'LightGBM' : 'Backend model';
 }
 
-function mapBackendAssessment(detail: AssessmentDetail): AssessmentRecord {
+function mapBackendAssessment(detail: AssessmentDetail): AssessmentRecordWithRawAudit {
   const latestPrediction = detail.latest_prediction;
   const latestReview = detail.latest_clinician_review;
   const predictedEsi = esiLevelOrFallback(latestPrediction?.predicted_esi ?? detail.model_predicted_esi, 3);
@@ -363,7 +370,7 @@ export function AssessmentDetailPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [record, setRecord] = useState<AssessmentRecord | null>(null);
+  const [record, setRecord] = useState<AssessmentRecordWithRawAudit | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reviewNote, setReviewNote] = useState('');
@@ -597,20 +604,23 @@ export function AssessmentDetailPage() {
             <CardBody className="pt-4">
               <div className="space-y-2.5">
                 {record.auditTrail.map((event) => (
-                  <div key={event.id} className="rounded-2xl border border-slate-200 bg-white p-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="font-bold text-slate-950">{event.action}</p><p className="text-xs font-semibold text-slate-500">{formatDateTime(event.timestamp)}</p></div>
-                    <p className="mt-1 text-sm text-slate-600">{event.details}</p>
-                    {event.metadata?.length ? (
-                      <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-                        {event.metadata.map((item) => (
-                          <div key={`${event.id}-${item.label}`} className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                            <dt className="text-[10px] font-black uppercase tracking-wide text-slate-400">{item.label}</dt>
-                            <dd className="mt-0.5 text-xs font-semibold text-slate-700 [overflow-wrap:anywhere]">{item.value}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                    ) : null}
-                    <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400 [overflow-wrap:anywhere]">{event.actor}</p>
+                  <div key={event.id} className="space-y-2.5">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="font-bold text-slate-950">{event.action}</p><p className="text-xs font-semibold text-slate-500">{formatDateTime(event.timestamp)}</p></div>
+                      <p className="mt-1 text-sm text-slate-600">{event.details}</p>
+                      {event.metadata?.length ? (
+                        <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {event.metadata.map((item) => (
+                            <div key={`${event.id}-${item.label}`} className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                              <dt className="text-[10px] font-black uppercase tracking-wide text-slate-400">{item.label}</dt>
+                              <dd className="mt-0.5 text-xs font-semibold text-slate-700 [overflow-wrap:anywhere]">{item.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : null}
+                      <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400 [overflow-wrap:anywhere]">{event.actor}</p>
+                    </div>
+                    <ClinicalNlpAuditEvidenceCard event={event.rawEvent} />
                   </div>
                 ))}
               </div>
