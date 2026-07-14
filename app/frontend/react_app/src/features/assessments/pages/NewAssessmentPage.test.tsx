@@ -31,6 +31,57 @@ vi.mock('@/context/ToastContext', () => ({
 }));
 
 describe('NewAssessmentPage', () => {
+  it('fills the clinical note with the demo scenario without running extraction or prediction', () => {
+    render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    fireEvent.click(screen.getByRole('button', { name: /use demo note/i }));
+
+    expect(screen.getByLabelText(/clinical note \/ transcript/i)).toHaveValue(
+      '62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2. Patient looks pale and dizzy.'
+    );
+    expect(screen.getByText('Demo note is for workflow testing only.')).toBeInTheDocument();
+    expect(extractClinicalIntake).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
+  });
+
+  it('clears stale NLP extraction review state when loading the demo note', async () => {
+    render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    fireEvent.change(screen.getByLabelText(/clinical note \/ transcript/i), {
+      target: { value: 'Previous note for extraction.' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /extract intake fields/i }));
+
+    await screen.findByText(/clinical intake nlp safety layer/i);
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /i reviewed the extracted fields before prediction/i
+      })
+    );
+    fireEvent.click(screen.getByRole('button', { name: /use demo note/i }));
+
+    expect(screen.queryByText(/clinical intake nlp safety layer/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('checkbox', {
+        name: /i reviewed the extracted fields before prediction/i
+      })
+    ).not.toBeInTheDocument();
+    expect(extractClinicalIntake).toHaveBeenCalledTimes(1);
+    expect(createPrediction).not.toHaveBeenCalled();
+  });
+
   it('extracts clinical note fields for clinician review without running prediction', async () => {
   render(
     <MemoryRouter>
