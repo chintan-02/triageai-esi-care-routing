@@ -13,6 +13,6 @@ export function extractClinicalIntake(
 
   return apiRequest<ClinicalIntakeExtractionResponse>('/nlp/extract-intake', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: payload
   });
 }
