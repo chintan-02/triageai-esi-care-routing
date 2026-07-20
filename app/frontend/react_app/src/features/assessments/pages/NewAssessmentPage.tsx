@@ -124,6 +124,7 @@ export function NewAssessmentPage() {
   const [symptomText, setSymptomText] = useState('');
   const [duration, setDuration] = useState('');
   const [clinicalNote, setClinicalNote] = useState('');
+  const [transcriptText, setTranscriptText] = useState('');
   const [nlpExtraction, setNlpExtraction] = useState<ClinicalIntakeExtractionResponse | null>(null);
   const [isExtractingNlp, setIsExtractingNlp] = useState(false);
   const [nlpError, setNlpError] = useState<string | null>(null);
@@ -196,6 +197,13 @@ export function NewAssessmentPage() {
 
   const handleUseDemoNote = () => {
     setClinicalNote(CLINICAL_NLP_DEMO_NOTE);
+    setNlpExtraction(null);
+    setIsNlpReviewed(false);
+    setNlpError(null);
+  };
+
+  const handleUseTranscript = () => {
+    setClinicalNote(transcriptText);
     setNlpExtraction(null);
     setIsNlpReviewed(false);
     setNlpError(null);
@@ -418,6 +426,32 @@ export function NewAssessmentPage() {
       placeholder="Example: 62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."
     />
   </label>
+
+  <div className="mt-3 rounded-2xl border border-blue-100 bg-white/80 p-3">
+    <p className="text-sm font-black text-blue-950">Speech / transcript</p>
+    <label className="mt-2 flex flex-col gap-1.5 text-sm font-semibold text-slate-700">
+      Transcript text
+      <textarea
+        value={transcriptText}
+        onChange={(event) => setTranscriptText(event.target.value)}
+        className="focus-ring min-h-[88px] resize-y rounded-2xl border border-blue-100 bg-white px-3.5 py-2.5"
+        placeholder="Paste or enter transcript text for clinician review."
+      />
+    </label>
+    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-xs font-semibold leading-5 text-blue-900">
+        Transcript text requires clinician review before extraction or prediction.
+      </p>
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={!transcriptText.trim() || isExtractingNlp}
+        onClick={handleUseTranscript}
+      >
+        Use transcript as clinical note
+      </Button>
+    </div>
+  </div>
 
   <div className="mt-2 w-fit">
     <Button
