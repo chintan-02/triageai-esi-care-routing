@@ -14,13 +14,13 @@ def test_speech_transcription_returns_placeholder_contract() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body == {
-        "transcript": "",
-        "confidence": None,
-        "language": "en-US",
-        "is_placeholder": True,
-        "message": (
-            "Speech-to-text contract is ready. Azure Speech integration will "
-            "be added in the next implementation phase."
-        ),
-    }
+    assert body["transcript_text"] == ""
+    assert body["transcript"] == ""
+    assert body["source"] == "speech_transcript"
+    assert body["requires_clinician_review"] is True
+    assert (
+        "clinician review before NLP extraction or prediction"
+        in body["disclaimer"]
+    )
+    assert "diagnosis" not in body
+    assert "treatment" not in body

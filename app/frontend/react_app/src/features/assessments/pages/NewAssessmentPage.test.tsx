@@ -82,6 +82,45 @@ describe('NewAssessmentPage', () => {
     expect(createPrediction).not.toHaveBeenCalled();
   });
 
+  it('uses transcript text as the clinical note without automatically extracting or predicting', async () => {
+    render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    fireEvent.change(screen.getByLabelText(/clinical note \/ transcript/i), {
+      target: { value: 'Previous note for extraction.' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /extract intake fields/i }));
+
+    await screen.findByText(/clinical intake nlp safety layer/i);
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /i reviewed the extracted fields before prediction/i
+      })
+    );
+
+    extractClinicalIntake.mockClear();
+    const transcript = 'Patient reports dizziness beginning this morning.';
+    fireEvent.change(screen.getByLabelText(/transcript text/i), {
+      target: { value: transcript }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /use transcript as clinical note/i }));
+
+    expect(screen.getByLabelText(/clinical note \/ transcript/i)).toHaveValue(transcript);
+    expect(screen.queryByText(/clinical intake nlp safety layer/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('checkbox', {
+        name: /i reviewed the extracted fields before prediction/i
+      })
+    ).not.toBeInTheDocument();
+    expect(extractClinicalIntake).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
+  });
+
   it('extracts clinical note fields for clinician review without running prediction', async () => {
   render(
     <MemoryRouter>
