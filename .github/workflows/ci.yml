@@ -53,7 +53,10 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
+
+      - name: Pin stable npm
+        run: npm install -g npm@10.9.2
 
       - name: Show Node and npm versions
         run: |
@@ -64,7 +67,7 @@ jobs:
         env:
           CI: true
           NODE_ENV: development
-        run: npm ci --include=dev --no-audit --no-fund
+        run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps
 
       - name: Run frontend tests
         run: npm run test
