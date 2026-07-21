@@ -29,9 +29,10 @@ services:
     environment:
       APP_ENV: demo
       DEMO_MODE: "true"
-      TRIAGEAI_BACKEND_URL: http://backend:8001
+      VITE_USE_MOCK_API: "false"
+      VITE_API_BASE_URL: http://localhost:8001
     ports:
-      - "8501:8501"
+      - "5173:5173"
     depends_on:
       - backend
 

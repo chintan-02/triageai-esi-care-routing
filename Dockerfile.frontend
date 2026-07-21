@@ -1,16 +1,18 @@
-FROM python:3.11-slim
+FROM node:20-alpine
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+ENV NODE_ENV=development
 
-WORKDIR /app
+WORKDIR /app/app/frontend/react_app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+COPY app/frontend/react_app/package.json ./
+COPY app/frontend/react_app/package-lock.json ./
 
-COPY app ./app
-COPY pyproject.toml README.md ./
+RUN corepack enable \
+    && corepack prepare pnpm@9.15.9 --activate \
+    && pnpm install --no-frozen-lockfile
 
-EXPOSE 8501
-CMD ["streamlit", "run", "app/frontend/streamlit_app/Home.py", "--server.address=0.0.0.0", "--server.port=8501"]
+COPY app/frontend/react_app ./
+
+EXPOSE 5173
+
+CMD ["pnpm", "run", "dev"]
