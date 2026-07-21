@@ -381,7 +381,7 @@ It is responsible for:
 | `GET` | `/dashboard/summary` | Return backend dashboard summary |
 | `POST` | `/reports/generate` | Compatibility report-generation endpoint |
 | `GET` | `/reports/{report_id}/download` | Download a generated report |
-| `POST` | `/speech/transcribe` | Placeholder speech-transcription endpoint |
+| `POST` | `/speech/transcribe` | Review-required speech transcription with a safe unconfigured fallback |
 
 `app/backend/api/routes/auth.py` exists, but its router is not currently included in `app/backend/api/main.py`. Authentication routes are therefore not documented as live backend endpoints.
 
@@ -887,3 +887,11 @@ Docker Compose defines safe demo environment values inline for local full-stack 
 TriageAI is currently ready for local Docker demonstration and deployment planning. A full production deployment would require PostgreSQL, managed secrets, persistent report storage, HTTPS, monitoring, privacy/security review, clinical validation, and organizational approval.
 
 See: `docs/deployment/deployment_readiness_plan.md`
+
+---
+
+## System Architecture
+
+TriageAI connects the React intake experience, optional Azure Speech-to-Text path, review-first clinical NLP, FastAPI services, the LightGBM V2 ESI 3/4/5 registry, safety escalation, clinician review, persistence, audit history, and PDF reporting. Every AI-assisted stage remains decision support only and requires clinician review.
+
+See the [full system architecture and workflow](docs/architecture/triageai_system_architecture.md), including the Mermaid diagram and deployment boundaries.
