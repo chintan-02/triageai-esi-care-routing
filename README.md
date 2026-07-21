@@ -879,3 +879,11 @@ VITE_API_BASE_URL=http://localhost:8001
 ```
 
 Docker Compose defines safe demo environment values inline for local full-stack testing. Do not commit real `.env` files, secrets, generated reports, SQLite databases, `node_modules`, or `dist` outputs.
+
+---
+
+## Deployment Readiness
+
+TriageAI is currently ready for local Docker demonstration and deployment planning. A full production deployment would require PostgreSQL, managed secrets, persistent report storage, HTTPS, monitoring, privacy/security review, clinical validation, and organizational approval.
+
+See: `docs/deployment/deployment_readiness_plan.md`
