@@ -70,9 +70,9 @@ export function DashboardPage() {
     setError(null);
     try {
       setSummary(await getDashboardSummary());
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Backend request failed.';
-      setError(`Unable to load real backend dashboard summary from GET /dashboard/summary. ${message}`);
+    } catch {
+      setSummary(null);
+      setError('Dashboard data could not be loaded right now. Please retry.');
     } finally {
       setIsLoading(false);
     }
@@ -140,7 +140,7 @@ export function DashboardPage() {
 
       {isLoading ? (
         <SkeletonStatRow />
-      ) : (
+      ) : error ? null : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total assessments" value={stats.totalAssessments} hint="Loaded from backend database" icon={<Activity size={22} />} tone="blue" />
           <StatCard label="Pending review" value={stats.pendingReviews} hint="Clinician review still required" icon={<Clock size={22} />} tone="amber" />
@@ -164,6 +164,8 @@ export function DashboardPage() {
           <CardBody className="overflow-x-auto p-0">
             {isLoading ? (
               <SkeletonTableRows rows={6} cols={7} />
+            ) : error ? (
+              <p className="p-6 text-sm font-semibold text-slate-500">Recent assessments are temporarily unavailable.</p>
             ) : recent.length === 0 ? (
               <div className="flex flex-col items-start gap-4 p-6">
                 <p className="text-sm text-slate-600">No assessments yet. Start a structured intake to generate a decision-support summary.</p>
@@ -235,7 +237,13 @@ export function DashboardPage() {
           <Card>
             <CardHeader title="Final ESI distribution" description="Final routing decisions across stored assessments." />
             <CardBody>
-              {isLoading ? <SkeletonBlock className="h-40 w-full" /> : <EsiDistributionDonut distribution={stats.esiDistribution} />}
+              {isLoading ? (
+                <SkeletonBlock className="h-40 w-full" />
+              ) : error ? (
+                <p className="text-sm font-semibold text-slate-500">ESI distribution is temporarily unavailable.</p>
+              ) : (
+                <EsiDistributionDonut distribution={stats.esiDistribution} />
+              )}
             </CardBody>
           </Card>
 
@@ -244,6 +252,8 @@ export function DashboardPage() {
             <CardBody className="space-y-5">
               {isLoading ? (
                 <SkeletonBlock className="h-40 w-full" />
+              ) : error ? (
+                <p className="text-sm font-semibold text-slate-500">Operational signals are temporarily unavailable.</p>
               ) : (
                 <>
                   <OperationalTrendChart points={trendPoints} />

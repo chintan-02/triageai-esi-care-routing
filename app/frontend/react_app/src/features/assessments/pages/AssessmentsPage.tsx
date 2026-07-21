@@ -101,9 +101,9 @@ export function AssessmentsPage() {
     try {
       const loaded = await listAssessments();
       setAssessments(loaded);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Backend request failed.';
-      setError(`Unable to load real backend assessments from GET /assessments. ${message}`);
+    } catch {
+      setAssessments([]);
+      setError('Assessments could not be loaded right now. Please retry.');
     } finally {
       setIsLoading(false);
     }
@@ -215,6 +215,8 @@ export function AssessmentsPage() {
         <CardBody className="overflow-x-auto p-0">
           {isLoading ? (
             <SkeletonTableRows rows={6} cols={8} />
+          ) : error ? (
+            <p className="p-6 text-sm font-semibold text-slate-500">The assessment registry is temporarily unavailable.</p>
           ) : filtered.length === 0 ? (
             <div className="p-6">
               <EmptyState

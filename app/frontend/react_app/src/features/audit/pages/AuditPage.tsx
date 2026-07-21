@@ -456,10 +456,9 @@ export function AuditPage() {
       });
 
       setAuditEvents(loadedEvents);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Backend request failed.';
+    } catch {
       setAuditEvents([]);
-      setLoadError(`Unable to load real backend audit data from GET /assessments and GET /assessments/{assessment_id}/audit. ${message}`);
+      setLoadError('Audit events could not be loaded right now. Please retry.');
     } finally {
       setIsLoading(false);
     }
@@ -533,6 +532,8 @@ export function AuditPage() {
         <CardBody>
           {isLoading ? (
             <SkeletonTableRows rows={6} cols={4} />
+          ) : loadError ? (
+            <p className="p-2 text-sm font-semibold text-slate-500">The audit timeline is temporarily unavailable.</p>
           ) : events.length === 0 ? (
             <p className="p-2 text-sm text-slate-500">No audit events match this filter.</p>
           ) : (
