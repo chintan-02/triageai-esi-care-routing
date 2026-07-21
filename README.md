@@ -8,6 +8,7 @@
 ![LightGBM](https://img.shields.io/badge/Model-LightGBM_V2-02569B?style=flat-square)
 ![Testing](https://img.shields.io/badge/Testing-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Active_Development-F59E0B?style=flat-square)
+[![CI](https://github.com/chintan-02/triageai-esi-care-routing/actions/workflows/ci.yml/badge.svg)](https://github.com/chintan-02/triageai-esi-care-routing/actions/workflows/ci.yml)
 
 **A review-first healthcare AI decision-support workflow for structured clinical intake, ESI care routing, safety escalation, clinician review, auditability, and PDF reporting.**
 
@@ -30,7 +31,8 @@
 - The React frontend is connected to real FastAPI endpoints by default.
 - A backend **Clinical Intake NLP Safety Layer** is implemented through `POST /nlp/extract-intake`.
 - The NLP layer extracts reviewable fields, source-text evidence, safety cues, and missing vital-sign information from clinician free-text notes.
-- React-based review and correction of extracted NLP fields remains a planned frontend integration step.
+- React-based review and correction of extracted NLP fields is implemented before prediction.
+- A safe speech/transcript workflow is implemented for copying transcript text into the clinical note before NLP extraction and clinician review.
 - The legacy Streamlit frontend is retained under `app/frontend/streamlit_app/`.
 - SQLite is used for local development and demonstration.
 - PostgreSQL is the recommended database for professional cloud deployment.
