@@ -29,7 +29,7 @@ type SafetyGateSummary = {
   result: string;
   rulesFired: string;
   explanation: string;
-  recommendation: string;
+  reviewContext: string;
 };
 
 type NormalizedReviewState = {
@@ -149,9 +149,9 @@ function safetyGateSummary(record: AssessmentRecord): SafetyGateSummary {
     result,
     rulesFired,
     explanation,
-    recommendation: highRisk
-      ? 'Immediate clinician assessment recommended. Confirm final acuity before care routing.'
-      : 'Clinician review required before final care routing.'
+    reviewContext: highRisk
+      ? 'Safety flags require clinician review. Decision-support only; clinician judgment remains required.'
+      : 'Clinician review required before final care routing. Decision-support only; clinician judgment remains required.'
   };
 }
 
@@ -208,8 +208,11 @@ function reviewRows(normalized: NormalizedReviewState) {
 }
 
 function auditEventsForPdf(record: AssessmentRecord, normalized: NormalizedReviewState): AuditEvent[] {
-  const nonReviewEvents = record.auditTrail.filter((event) => !/^Decision (accepted|overridden)$/i.test(event.action));
+  const nonReviewEvents = record.auditTrail.filter(
+    (event) => !/^(?:Clinician review |Decision )(?:accepted|overridden)$/i.test(event.action)
+  );
   if (normalized.status === 'pending') return nonReviewEvents;
+  const clinicianDecision = normalized.status === 'overridden' ? 'Overridden' : 'Accepted';
   return [
     ...nonReviewEvents,
     {
@@ -217,7 +220,11 @@ function auditEventsForPdf(record: AssessmentRecord, normalized: NormalizedRevie
       timestamp: normalized.reviewedAt ?? new Date().toISOString(),
       actor: normalized.reviewer,
       action: normalized.status === 'overridden' ? 'Decision overridden' : 'Decision accepted',
-      details: normalized.note,
+      details: [
+        `Clinician decision: ${clinicianDecision}`,
+        `Final ESI: ${normalized.displayedFinalEsi}`,
+        `Review note: ${normalized.note}`
+      ].join('\n'),
       severity: normalized.status === 'overridden' ? 'warning' : 'info'
     }
   ];
@@ -234,7 +241,7 @@ function drawFooter(doc: jsPDFType, pageWidth: number, margin: number) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.text(
-      'This report supports structured triage review, is not diagnosis, and does not replace clinician judgment or emergency protocols.',
+      'Decision-support only; clinician review and judgment remain required. Not diagnosis, not a treatment recommendation, and not a substitute for emergency protocols.',
       margin,
       footerY,
       { maxWidth: pageWidth - margin * 2 - 70 }
@@ -266,7 +273,7 @@ export async function generateAssessmentPdf(record: AssessmentRecord) {
   doc.text('Clinical ESI Routing Summary', margin + 20, 62);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text('Human-in-the-loop ESI care routing report — not a diagnostic tool', margin + 20, 80);
+  doc.text('Decision-support only — clinician review required', margin + 20, 80);
   doc.text(`Assessment ID: ${record.id}`, margin + 20, 99);
   doc.text(`Generated time: ${formatDateTime(generatedAt)}`, margin + 20, 113);
 
@@ -458,8 +465,8 @@ export async function generateAssessmentPdf(record: AssessmentRecord) {
   const probabilityNoteY = drawWrappedText(doc, 'Raw model probabilities are shown for transparency and are not calibrated probabilities.', margin, barY + 4, columnWidth, 9);
   const leftColumnBottom = probabilityNoteY + 2;
 
-  // ---- Safety rules & recommendation -------------------------------------
-  sectionTitle(doc, 'Safety Rules & Recommendation', rightColumnX, y);
+  // ---- Safety rules & clinician review context ---------------------------
+  sectionTitle(doc, 'Safety Rules & Review Context', rightColumnX, y);
   autoTable(doc, {
     startY: y + 10,
     head: [['Signal', 'Value']],
@@ -467,7 +474,7 @@ export async function generateAssessmentPdf(record: AssessmentRecord) {
       ['Rules Fired', safety.rulesFired],
       ['Safety Gate Result', safety.result],
       ['Explanation', safety.explanation],
-      ['Recommendation', safety.recommendation]
+      ['Clinician review context', safety.reviewContext]
     ],
     styles: { fontSize: 8.2, cellPadding: 4, valign: 'top', overflow: 'linebreak' },
     headStyles: { fillColor: NAVY, textColor: [255, 255, 255] },

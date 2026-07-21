@@ -109,6 +109,8 @@ def test_clinical_nlp_demo_flow_reaches_audit_detail_and_pdf() -> None:
     assert "low oxygen" in normalized_pdf_text
     assert "Decision-support audit context only" in pdf_text
     assert DEMO_NOTE.lower() not in normalized_pdf_text
-    assert "diagnosis" not in normalized_pdf_text
+    assert "not diagnosis" in normalized_pdf_text
+    assert "not a treatment recommendation" in normalized_pdf_text
+    assert "not a substitute for emergency protocols" in normalized_pdf_text
     assert "treatment_recommendation" not in normalized_pdf_text
     assert "ai confirmed esi" not in normalized_pdf_text

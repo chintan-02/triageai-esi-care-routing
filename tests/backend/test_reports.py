@@ -40,8 +40,8 @@ def reviewed_nlp_intake_payload() -> dict[str, object]:
                 "symptoms": ["chest pain", "shortness of breath"],
                 "vitals": {"hr": 118, "sbp": 92, "dbp": 60, "o2": 91},
                 "clinical_note": "do not store full raw note",
-                "diagnosis": "do not include",
-                "treatment_recommendation": "do not include",
+                "diagnosis": "unsafe diagnosis payload",
+                "treatment_recommendation": "unsafe treatment payload",
                 "predicted_esi": 1,
                 "final_esi": 1,
             },
@@ -120,7 +120,11 @@ def test_download_generated_report_returns_pdf() -> None:
             "clinician_id": "clinician-123",
             "action": "accept",
             "final_esi": predict_response.json()["final_esi"],
-            "notes": "Reviewed for PDF report test.",
+            "notes": (
+                "Reviewed structured intake, model output, safety-rule context, and "
+                "available patient information before accepting the final routing "
+                "decision. Important review context retained."
+            ),
         },
     )
     report_response = client.post(
@@ -135,6 +139,10 @@ def test_download_generated_report_returns_pdf() -> None:
     assert download_response.headers["content-type"] == "application/pdf"
     assert download_response.content.startswith(b"%PDF")
     assert len(download_response.content) > 500
+    text = pdf_text(download_response.content)
+    assert "Clinician decision: Accept" in text
+    assert "Clinician final ESI:" in text
+    assert "Important Review Context Retained" in text
 
 
 def test_pdf_includes_reviewed_clinical_nlp_evidence_without_unsafe_metadata() -> None:
@@ -155,12 +163,24 @@ def test_pdf_includes_reviewed_clinical_nlp_evidence_without_unsafe_metadata() -
 
     assert "Clinical NLP Review Evidence" in text
     assert "Reviewed before prediction" in text
+    assert "Safety Rules & Review Context" in text
+    assert "Clinician review context" in text
+    assert "Safety flags require clinician review" in text
+    assert "clinician judgment remains required" in text
+    assert "Explanation / Decision-support note" in text
+    assert "Safety Rules & Recommendation" not in text
+    assert "High-priority clinician review recommended" not in text
+    assert "Extracted fields summary" in text
     assert "low oxygen" in normalized_text
     assert "respiratory rate" in normalized_text
     assert "62-year-old" in text
     assert "Decision-support audit context only" in text
     assert "do not store full raw note" not in normalized_text
-    assert "diagnosis" not in normalized_text
+    assert "not diagnosis" in normalized_text
+    assert "not a treatment recommendation" in normalized_text
+    assert "not a substitute for emergency protocols" in normalized_text
+    assert "unsafe diagnosis payload" not in normalized_text
+    assert "unsafe treatment payload" not in normalized_text
     assert "treatment_recommendation" not in normalized_text
     assert "AI confirmed ESI" not in text
 
