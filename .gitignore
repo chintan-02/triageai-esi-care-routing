@@ -1,46 +1,56 @@
+# Environment files
 .env
-__pycache__/
-*.pyc
+.env.*
+!.env.example
+!**/.env.example
+
+# Python
 .venv/
 venv/
+__pycache__/
+*.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# macOS / editor / logs
 .DS_Store
+*.log
+*.tmp
+*.swp
+~$*.docx
+
+# Local databases and generated reports
+triageai.db
+*.db
+*.sqlite
+*.sqlite3
+reports/generated/
+reports/generated/*.pdf
 backups/
+
+# Frontend
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
+# Data and notebook caches
 data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
-*.db
-*.sqlite
+notebooks/.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Large/local model artifacts outside final registry
 *.pkl
 *.joblib
-model_artifacts/*.joblib
 model_artifacts/*.pkl
-legacy/khushal_reference/**/__pycache__/
-reports/generated/*.pdf
+model_artifacts/*.joblib
 
-# Legacy Khushal reference - avoid committing old datasets/models/logs/results
-legacy/khushal_reference/data/*
-legacy/khushal_reference/models/*
-legacy/khushal_reference/logs/*
-legacy/khushal_reference/results/*
-
-# Keep folder placeholders if needed
-!legacy/khushal_reference/data/.gitkeep
-!legacy/khushal_reference/models/.gitkeep
-!legacy/khushal_reference/logs/.gitkeep
-!legacy/khushal_reference/results/.gitkeep
-
-# Legacy Khushal notebooks - keep locally only, avoid heavy old experiments in public repo
-legacy/khushal_reference/notebooks/*
-!legacy/khushal_reference/notebooks/.gitkeep
-
-# Legacy Khushal notebooks - keep locally only, avoid heavy old experiments in public repo
-legacy/khushal_reference/notebooks/*
-!legacy/khushal_reference/notebooks/.gitkeep
-
-*.joblib
-
+# Keep final deployed preprocessing artifact tracked
 !model_registry/esi_345_lightgbm_v2/esi_345_lightgbm_v2_preprocessing_artifacts.joblib
 
-~$*.docx
+# Legacy/local archive content
+legacy/
