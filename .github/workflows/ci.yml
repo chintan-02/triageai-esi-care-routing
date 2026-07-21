@@ -55,25 +55,20 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Pin stable npm
-        run: npm install -g npm@10.9.2
-
-      - name: Show Node and npm versions
+      - name: Enable pnpm
         run: |
-          node --version
-          npm --version
+          corepack enable
+          corepack prepare pnpm@9.15.9 --activate
+          pnpm --version
 
       - name: Install frontend dependencies
-        env:
-          CI: true
-          NODE_ENV: development
-        run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps
+        run: pnpm install --no-frozen-lockfile
 
       - name: Run frontend tests
-        run: npm run test
+        run: pnpm run test
 
       - name: Build frontend
-        run: npm run build
+        run: pnpm run build
 
   test:
     name: test
