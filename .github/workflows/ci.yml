@@ -56,7 +56,7 @@ jobs:
           cache-dependency-path: app/frontend/react_app/package-lock.json
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --include=dev --no-audit --no-fund
 
       - name: Run frontend tests
         run: npm run test
@@ -81,7 +81,7 @@ jobs:
           cache-dependency-path: app/frontend/react_app/package-lock.json
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --include=dev --no-audit --no-fund
 
       - name: Build frontend
         run: npm run build
