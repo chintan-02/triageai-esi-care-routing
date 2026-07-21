@@ -170,4 +170,15 @@ describe('AuditPage', () => {
     expect(screen.getByText('Prediction generated')).toBeInTheDocument();
     expect(screen.queryByText('Clinical NLP review completed')).not.toBeInTheDocument();
   });
+
+  it('distinguishes unavailable audit data from an empty filtered timeline', async () => {
+    listAssessments.mockRejectedValue(new Error('GET /assessments failed with stack details'));
+
+    render(<AuditPage />);
+
+    expect(await screen.findByText('Audit events could not be loaded right now. Please retry.')).toBeInTheDocument();
+    expect(screen.getByText('The audit timeline is temporarily unavailable.')).toBeInTheDocument();
+    expect(screen.queryByText('No audit events match this filter.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/stack details/)).not.toBeInTheDocument();
+  });
 });
