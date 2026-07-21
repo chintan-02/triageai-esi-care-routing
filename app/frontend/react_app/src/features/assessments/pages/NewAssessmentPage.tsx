@@ -13,8 +13,10 @@ import { VitalSliderPanel } from '@/components/clinical/VitalSliderPanel';
 import { vitalFlag } from '@/lib/vitals';
 import { getMissingIntakeFields } from '@/lib/intakeValidation';
 import { extractClinicalIntake } from '@/api/clinicalNlp';
+import { transcribeRecording } from '@/api/speech';
 import { ClinicalNlpReviewPanel } from '@/components/clinical-nlp/ClinicalNlpReviewPanel';
 import type { ClinicalIntakeExtractionResponse } from '@/types/clinicalNlp';
+import type { SpeechTranscriptionResponse } from '@/types/speech';
 
 function createDefaultPatient(): PatientProfile {
   const entropy = `${Date.now().toString().slice(-5)}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
@@ -153,8 +155,12 @@ export function NewAssessmentPage() {
   const [clinicalNote, setClinicalNote] = useState('');
   const [transcriptText, setTranscriptText] = useState('');
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
+  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionResult, setTranscriptionResult] = useState<SpeechTranscriptionResponse | null>(null);
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const [nlpExtraction, setNlpExtraction] = useState<ClinicalIntakeExtractionResponse | null>(null);
   const [isExtractingNlp, setIsExtractingNlp] = useState(false);
   const [nlpError, setNlpError] = useState<string | null>(null);
@@ -324,7 +330,10 @@ export function NewAssessmentPage() {
 
           const nextUrl = URL.createObjectURL(recording);
           recordingUrlRef.current = nextUrl;
+          setRecordingBlob(recording);
           setRecordingUrl(nextUrl);
+          setTranscriptionResult(null);
+          setTranscriptionError(null);
         } else {
           setRecordingError('No audio was captured. Please try recording again.');
         }
@@ -371,8 +380,39 @@ export function NewAssessmentPage() {
       URL.revokeObjectURL(recordingUrlRef.current);
       recordingUrlRef.current = null;
     }
+    setRecordingBlob(null);
     setRecordingUrl(null);
     setRecordingError(null);
+    setTranscriptionResult(null);
+    setTranscriptionError(null);
+  };
+
+  const handleTranscribeRecording = async () => {
+    if (!recordingBlob || isTranscribing) return;
+
+    setIsTranscribing(true);
+    setTranscriptionResult(null);
+    setTranscriptionError(null);
+
+    try {
+      const result = await transcribeRecording(recordingBlob);
+      if (!isMountedRef.current) return;
+
+      const returnedTranscript = (result.transcript_text || result.transcript || '').trim();
+      if (returnedTranscript) {
+        setTranscriptText(returnedTranscript);
+      }
+      setTranscriptionResult(result);
+    } catch {
+      if (!isMountedRef.current) return;
+      setTranscriptionError(
+        'Recording could not be transcribed. You can enter transcript text manually or try again.'
+      );
+    } finally {
+      if (isMountedRef.current) {
+        setIsTranscribing(false);
+      }
+    }
   };
   
   const handleExtractClinicalNote = async () => {
@@ -606,7 +646,7 @@ export function NewAssessmentPage() {
           type="button"
           variant="secondary"
           className="px-3 py-2 text-xs"
-          disabled={recordingState !== 'idle'}
+          disabled={recordingState !== 'idle' || isTranscribing}
           onClick={handleStartRecording}
         >
           {recordingState === 'requesting' ? <Loader2 className="animate-spin" size={16} /> : <Mic size={16} />}
@@ -626,11 +666,21 @@ export function NewAssessmentPage() {
           type="button"
           variant="ghost"
           className="px-3 py-2 text-xs"
-          disabled={!recordingUrl || recordingState !== 'idle'}
+          disabled={!recordingUrl || recordingState !== 'idle' || isTranscribing}
           onClick={handleClearRecording}
         >
           <Trash2 size={16} />
           Clear recording
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          className="px-3 py-2 text-xs"
+          disabled={!recordingBlob || recordingState !== 'idle' || isTranscribing}
+          onClick={handleTranscribeRecording}
+        >
+          {isTranscribing ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />}
+          {isTranscribing ? 'Transcribing recording' : 'Transcribe recording'}
         </Button>
         {recordingState === 'recording' ? (
           <span className="inline-flex items-center gap-2 text-xs font-bold text-red-700" role="status">
@@ -656,6 +706,26 @@ export function NewAssessmentPage() {
       {recordingError ? (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900" role="alert">
           {recordingError}
+        </div>
+      ) : null}
+
+      {transcriptionResult ? (
+        <div
+          className={`mt-3 rounded-xl border px-3 py-2 text-xs font-semibold leading-5 ${
+            transcriptionResult.is_placeholder
+              ? 'border-amber-200 bg-amber-50 text-amber-900'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-900'
+          }`}
+          role="status"
+        >
+          <p>{transcriptionResult.message}</p>
+          <p className="mt-1 font-medium">{transcriptionResult.disclaimer}</p>
+        </div>
+      ) : null}
+
+      {transcriptionError ? (
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-800" role="alert">
+          {transcriptionError}
         </div>
       ) : null}
 

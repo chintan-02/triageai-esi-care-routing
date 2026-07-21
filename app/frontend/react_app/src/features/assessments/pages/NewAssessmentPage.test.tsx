@@ -1,11 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NewAssessmentPage } from './NewAssessmentPage';
 
-const { createPrediction, extractClinicalIntake } = vi.hoisted(() => ({
+const { createPrediction, extractClinicalIntake, transcribeRecording } = vi.hoisted(() => ({
   createPrediction: vi.fn(),
-  extractClinicalIntake: vi.fn()
+  extractClinicalIntake: vi.fn(),
+  transcribeRecording: vi.fn()
 }));
 const showToast = vi.fn();
 const mockNavigate = vi.fn();
@@ -26,12 +27,69 @@ vi.mock('@/api/clinicalNlp', () => ({
   extractClinicalIntake
 }));
 
+vi.mock('@/api/speech', () => ({
+  transcribeRecording
+}));
+
 vi.mock('@/context/ToastContext', () => ({
   useToast: () => ({ showToast })
 }));
 
+function installRecordingBrowserMocks() {
+  const stopTrack = vi.fn();
+  const getUserMedia = vi.fn().mockResolvedValue({
+    getTracks: () => [{ stop: stopTrack }]
+  });
+
+  class MockMediaRecorder {
+    state: RecordingState = 'inactive';
+    mimeType = 'audio/webm';
+    ondataavailable: ((event: BlobEvent) => void) | null = null;
+    onstop: ((event: Event) => void) | null = null;
+    onerror: ((event: Event) => void) | null = null;
+
+    start() {
+      this.state = 'recording';
+    }
+
+    stop() {
+      this.state = 'inactive';
+      this.ondataavailable?.({
+        data: new Blob(['recorded-audio'], { type: this.mimeType })
+      } as BlobEvent);
+      this.onstop?.(new Event('stop'));
+    }
+  }
+
+  const BrowserUrl = URL;
+  const createObjectUrl = vi.fn(() => 'blob:local-recording');
+  class MockUrl extends BrowserUrl {
+    static createObjectURL = createObjectUrl;
+    static revokeObjectURL = vi.fn();
+  }
+
+  vi.stubGlobal('MediaRecorder', MockMediaRecorder);
+  vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+  vi.stubGlobal('URL', MockUrl);
+
+  return { createObjectUrl, getUserMedia, MockUrl, stopTrack };
+}
+
+function openTranscriptSection() {
+  fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
+  fireEvent.click(screen.getByRole('button', { name: /next/i }));
+}
+
+async function createLocalRecording() {
+  fireEvent.click(screen.getByRole('button', { name: /start recording/i }));
+  await waitFor(() => expect(screen.getByText(/recording locally/i)).toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: /stop recording/i }));
+  await waitFor(() => expect(screen.getByLabelText(/recorded audio playback/i)).toBeInTheDocument());
+}
+
 describe('NewAssessmentPage', () => {
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -49,6 +107,7 @@ describe('NewAssessmentPage', () => {
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /stop recording/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /clear recording/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /transcribe recording/i })).toBeDisabled();
     expect(
       screen.getByText(
         'Audio recording is for local clinician review only. Transcript text must be reviewed before extraction or prediction.'
@@ -79,41 +138,7 @@ describe('NewAssessmentPage', () => {
   });
 
   it('records locally, stops microphone tracks, and renders playback', async () => {
-    const stopTrack = vi.fn();
-    const getUserMedia = vi.fn().mockResolvedValue({
-      getTracks: () => [{ stop: stopTrack }]
-    });
-
-    class MockMediaRecorder {
-      state: RecordingState = 'inactive';
-      mimeType = 'audio/webm';
-      ondataavailable: ((event: BlobEvent) => void) | null = null;
-      onstop: ((event: Event) => void) | null = null;
-      onerror: ((event: Event) => void) | null = null;
-
-      start() {
-        this.state = 'recording';
-      }
-
-      stop() {
-        this.state = 'inactive';
-        this.ondataavailable?.({
-          data: new Blob(['recorded-audio'], { type: this.mimeType })
-        } as BlobEvent);
-        this.onstop?.(new Event('stop'));
-      }
-    }
-
-    const BrowserUrl = URL;
-    const createObjectUrl = vi.fn(() => 'blob:local-recording');
-    class MockUrl extends BrowserUrl {
-      static createObjectURL = createObjectUrl;
-      static revokeObjectURL = vi.fn();
-    }
-
-    vi.stubGlobal('MediaRecorder', MockMediaRecorder);
-    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
-    vi.stubGlobal('URL', MockUrl);
+    const { createObjectUrl, getUserMedia, MockUrl, stopTrack } = installRecordingBrowserMocks();
 
     const { unmount } = render(
       <MemoryRouter>
@@ -121,16 +146,9 @@ describe('NewAssessmentPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
-    fireEvent.click(screen.getByRole('button', { name: /next/i }));
-    fireEvent.click(screen.getByRole('button', { name: /start recording/i }));
-
-    await waitFor(() => expect(screen.getByText(/recording locally/i)).toBeInTheDocument());
+    openTranscriptSection();
+    await createLocalRecording();
     expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
-
-    fireEvent.click(screen.getByRole('button', { name: /stop recording/i }));
-
-    await waitFor(() => expect(screen.getByLabelText(/recorded audio playback/i)).toBeInTheDocument());
     expect(screen.getByLabelText(/recorded audio playback/i)).toHaveAttribute('src', 'blob:local-recording');
     expect(stopTrack).toHaveBeenCalled();
     expect(createObjectUrl).toHaveBeenCalledOnce();
@@ -138,6 +156,113 @@ describe('NewAssessmentPage', () => {
     expect(createPrediction).not.toHaveBeenCalled();
     unmount();
     expect(MockUrl.revokeObjectURL).toHaveBeenCalledWith('blob:local-recording');
+  });
+
+  it('transcribes a recording, populates the editable transcript, and copies it manually to the clinical note', async () => {
+    installRecordingBrowserMocks();
+    const transcript = 'Patient reports dizziness beginning this morning.';
+    transcribeRecording.mockResolvedValue({
+      transcript_text: transcript,
+      transcript,
+      confidence: null,
+      language: 'en-US',
+      source: 'azure_speech',
+      requires_clinician_review: true,
+      is_placeholder: false,
+      message: 'Transcript generated. Clinician review is required before NLP extraction or prediction.',
+      disclaimer: 'Decision support only. Transcript requires clinician review before NLP extraction or prediction.'
+    });
+
+    render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    openTranscriptSection();
+    await createLocalRecording();
+    const transcribeButton = screen.getByRole('button', { name: /transcribe recording/i });
+    expect(transcribeButton).toBeEnabled();
+    fireEvent.click(transcribeButton);
+
+    await waitFor(() => expect(screen.getByLabelText(/transcript text/i)).toHaveValue(transcript));
+    expect(transcribeRecording).toHaveBeenCalledOnce();
+    expect(transcribeRecording.mock.calls[0][0]).toBeInstanceOf(Blob);
+    expect(screen.getByText(/transcript generated\. clinician review is required/i)).toBeInTheDocument();
+    expect(screen.getByText(/decision support only\. transcript requires clinician review/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/transcript text/i)).toBeEnabled();
+    expect(extractClinicalIntake).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /use transcript as clinical note/i }));
+
+    expect(screen.getByLabelText(/clinical note \/ transcript/i)).toHaveValue(transcript);
+    expect(extractClinicalIntake).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
+  });
+
+  it('shows an unconfigured Azure response without replacing manual transcript text', async () => {
+    installRecordingBrowserMocks();
+    transcribeRecording.mockResolvedValue({
+      transcript_text: '',
+      transcript: '',
+      confidence: null,
+      language: 'en-US',
+      source: 'azure_speech_unconfigured',
+      requires_clinician_review: true,
+      is_placeholder: true,
+      message: 'Azure Speech is not configured. Add AZURE_SPEECH_KEY and AZURE_SPEECH_REGION to enable transcription.',
+      disclaimer: 'Decision support only. Transcript requires clinician review before NLP extraction or prediction.'
+    });
+
+    render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    openTranscriptSection();
+    await createLocalRecording();
+    fireEvent.change(screen.getByLabelText(/transcript text/i), {
+      target: { value: 'Manual transcript remains editable.' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /transcribe recording/i }));
+
+    await screen.findByText(/azure speech is not configured/i);
+    expect(screen.getByLabelText(/transcript text/i)).toHaveValue('Manual transcript remains editable.');
+    expect(screen.getByLabelText(/transcript text/i)).toBeEnabled();
+    expect(extractClinicalIntake).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /clear recording/i }));
+    expect(screen.queryByLabelText(/recorded audio playback/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/azure speech is not configured/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/transcript text/i)).toHaveValue('Manual transcript remains editable.');
+  });
+
+  it('shows a safe transcription error while keeping manual transcript entry available', async () => {
+    installRecordingBrowserMocks();
+    transcribeRecording.mockRejectedValue(new Error('provider failure'));
+
+    render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    openTranscriptSection();
+    await createLocalRecording();
+    fireEvent.click(screen.getByRole('button', { name: /transcribe recording/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /recording could not be transcribed\. you can enter transcript text manually or try again/i
+      );
+    });
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/provider failure/i);
+    expect(screen.getByLabelText(/transcript text/i)).toBeEnabled();
+    expect(extractClinicalIntake).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
   });
 
   it('fills the clinical note with the demo scenario without running extraction or prediction', () => {
@@ -274,6 +399,7 @@ describe('NewAssessmentPage', () => {
 });
   beforeEach(() => {
     extractClinicalIntake.mockReset();
+    transcribeRecording.mockReset();
 extractClinicalIntake.mockResolvedValue({
   age: 62,
   gender: 'Male',
