@@ -16,6 +16,7 @@ jobs:
   backend-tests:
     name: Backend tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -39,6 +40,7 @@ jobs:
   frontend-ci:
     name: Frontend tests and build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     defaults:
       run:
@@ -51,11 +53,17 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: "npm"
-          cache-dependency-path: app/frontend/react_app/package-lock.json
+          node-version: "22"
+
+      - name: Show Node and npm versions
+        run: |
+          node --version
+          npm --version
 
       - name: Install frontend dependencies
+        env:
+          CI: true
+          NODE_ENV: development
         run: npm ci --include=dev --no-audit --no-fund
 
       - name: Run frontend tests
@@ -67,6 +75,7 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - backend-tests
       - frontend-ci
