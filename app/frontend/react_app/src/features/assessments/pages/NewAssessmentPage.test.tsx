@@ -78,6 +78,7 @@ function installRecordingBrowserMocks() {
 function openTranscriptSection() {
   fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
   fireEvent.click(screen.getByRole('button', { name: /next/i }));
+  fireEvent.click(screen.getByRole('button', { name: /use voice \/ transcript input/i }));
 }
 
 async function createLocalRecording() {
@@ -94,7 +95,7 @@ describe('NewAssessmentPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders local microphone recording controls in the transcript section', () => {
+  it('keeps speech and transcript controls compact until explicitly expanded', () => {
     render(
       <MemoryRouter>
         <NewAssessmentPage />
@@ -104,15 +105,21 @@ describe('NewAssessmentPage', () => {
     fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
     fireEvent.click(screen.getByRole('button', { name: /next/i }));
 
+    const disclosureButton = screen.getByRole('button', { name: /use voice \/ transcript input/i });
+    expect(disclosureButton).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText(/optional voice or transcript input/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /start recording/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/transcript text/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Transcript text must be reviewed before extraction or prediction.')).toBeInTheDocument();
+
+    fireEvent.click(disclosureButton);
+
+    expect(screen.getByRole('button', { name: /hide voice \/ transcript input/i })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /stop recording/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /clear recording/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /transcribe recording/i })).toBeDisabled();
-    expect(
-      screen.getByText(
-        'Audio recording is for local clinician review only. Transcript text must be reviewed before extraction or prediction.'
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/transcript text/i)).toBeEnabled();
   });
 
   it('shows a safe fallback when browser recording is unsupported', () => {
@@ -128,6 +135,7 @@ describe('NewAssessmentPage', () => {
 
     fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
     fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    fireEvent.click(screen.getByRole('button', { name: /use voice \/ transcript input/i }));
     fireEvent.click(screen.getByRole('button', { name: /start recording/i }));
 
     expect(screen.getByRole('alert')).toHaveTextContent(/not supported in this browser/i);
@@ -339,6 +347,7 @@ describe('NewAssessmentPage', () => {
 
     extractClinicalIntake.mockClear();
     const transcript = 'Patient reports dizziness beginning this morning.';
+    fireEvent.click(screen.getByRole('button', { name: /use voice \/ transcript input/i }));
     fireEvent.change(screen.getByLabelText(/transcript text/i), {
       target: { value: transcript }
     });
@@ -381,9 +390,23 @@ describe('NewAssessmentPage', () => {
   });
 
   expect(screen.getByText(/clinical intake nlp safety layer/i)).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Extracted demographics' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Complaint' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Key vitals' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Symptoms (2)' })).toBeInTheDocument();
   expect(screen.getAllByText(/low oxygen/i).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/low blood pressure/i).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/respiratory rate/i).length).toBeGreaterThan(0);
+  expect(screen.queryByText('“62-year-old”')).not.toBeInTheDocument();
+
+  const evidenceButton = screen.getByRole('button', { name: /view extraction evidence/i });
+  expect(evidenceButton).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(evidenceButton);
+  expect(screen.getByText('“62-year-old”')).toBeInTheDocument();
+  const hideEvidenceButton = screen.getByRole('button', { name: /hide extraction evidence/i });
+  expect(hideEvidenceButton).toHaveAttribute('aria-expanded', 'true');
+  fireEvent.click(hideEvidenceButton);
+  expect(screen.queryByText('“62-year-old”')).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: /patient/i }));
 
@@ -397,6 +420,44 @@ describe('NewAssessmentPage', () => {
 
   expect(createPrediction).not.toHaveBeenCalled();
 });
+
+  it('keeps clinician NLP review visible and gates prediction until confirmed', async () => {
+    render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    fireEvent.change(screen.getByLabelText(/clinical note \/ transcript/i), {
+      target: { value: '62-year-old male with chest pain and shortness of breath.' }
+    });
+    fireEvent.change(screen.getByLabelText(/duration/i), { target: { value: '2 hours' } });
+    fireEvent.click(screen.getByRole('button', { name: /extract intake fields/i }));
+
+    await screen.findByText(/clinical intake nlp safety layer/i);
+    const reviewCheckbox = screen.getByRole('checkbox', {
+      name: /i reviewed the extracted fields before prediction/i
+    });
+    expect(reviewCheckbox).toBeVisible();
+    expect(reviewCheckbox).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: /review & predict/i }));
+    expect(screen.getByRole('button', { name: /run esi decision support/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /complaint/i }));
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /i reviewed the extracted fields before prediction/i
+      })
+    );
+    fireEvent.click(screen.getByRole('button', { name: /review & predict/i }));
+
+    expect(screen.getByRole('button', { name: /run esi decision support/i })).toBeEnabled();
+    expect(createPrediction).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     extractClinicalIntake.mockReset();
     transcribeRecording.mockReset();

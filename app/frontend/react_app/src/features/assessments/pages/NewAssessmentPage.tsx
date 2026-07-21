@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, ClipboardCheck, FileText, Loader2, Mic, Sparkles, Square, Trash2, UserRound } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ClipboardCheck, FileText, Loader2, Mic, Sparkles, Square, Trash2, UserRound } from 'lucide-react';
 import { createPrediction } from '@/api/predictions';
 import { useToast } from '@/context/ToastContext';
 import { comorbidityOptions, riskFlagOptions } from '@/data/mockData';
@@ -154,6 +154,7 @@ export function NewAssessmentPage() {
   const [duration, setDuration] = useState('');
   const [clinicalNote, setClinicalNote] = useState('');
   const [transcriptText, setTranscriptText] = useState('');
+  const [isSpeechExpanded, setIsSpeechExpanded] = useState(false);
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
@@ -524,7 +525,7 @@ export function NewAssessmentPage() {
         </div>
       </div>
 
-      <form onSubmit={preventImplicitSubmit} className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <form onSubmit={preventImplicitSubmit} className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_300px] 2xl:gap-5">
         <section className="flex flex-col self-start overflow-hidden rounded-[1.45rem] border border-slate-200 bg-white/95 shadow-soft backdrop-blur">
           <div className="shrink-0 border-b border-slate-100 px-3.5 py-2.5 sm:px-4">
             <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-1">
@@ -634,13 +635,41 @@ export function NewAssessmentPage() {
   </label>
 
   <div className="mt-3 rounded-2xl border border-blue-100 bg-white/80 p-3">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="text-sm font-black text-blue-950">Speech / transcript</p>
-      <Badge className="border-emerald-200 bg-emerald-50 text-emerald-800">
-        Local recording only
-      </Badge>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-2.5">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+          <Mic size={16} />
+        </div>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-black text-blue-950">Speech / transcript</p>
+            {recordingBlob ? (
+              <Badge className="border-emerald-200 bg-emerald-50 text-emerald-800">Recording ready</Badge>
+            ) : null}
+          </div>
+          <p className="mt-0.5 text-xs font-semibold text-slate-600">Optional voice or transcript input</p>
+        </div>
+      </div>
+      <Button
+        type="button"
+        variant="secondary"
+        className="shrink-0 px-3 py-2 text-xs"
+        aria-controls="speech-transcript-controls"
+        aria-expanded={isSpeechExpanded}
+        disabled={recordingState !== 'idle' || isTranscribing}
+        onClick={() => setIsSpeechExpanded((expanded) => !expanded)}
+      >
+        {isSpeechExpanded ? 'Hide voice / transcript input' : 'Use voice / transcript input'}
+        <ChevronDown className={`transition-transform ${isSpeechExpanded ? 'rotate-180' : ''}`} size={16} />
+      </Button>
     </div>
-    <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+    <p className="mt-2 text-xs font-semibold leading-5 text-blue-900">
+      Transcript text must be reviewed before extraction or prediction.
+    </p>
+
+    {isSpeechExpanded ? (
+      <div id="speech-transcript-controls" className="mt-3 border-t border-blue-100 pt-3">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -730,7 +759,7 @@ export function NewAssessmentPage() {
       ) : null}
 
       <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
-        Audio recording is for local clinician review only. Transcript text must be reviewed before extraction or prediction.
+        Audio recording is for local clinician review only.
       </p>
     </div>
     <label className="mt-2 flex flex-col gap-1.5 text-sm font-semibold text-slate-700">
@@ -744,7 +773,7 @@ export function NewAssessmentPage() {
     </label>
     <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-xs font-semibold leading-5 text-blue-900">
-        Transcript text requires clinician review before extraction or prediction.
+        Review and edit the transcript before copying it into the clinical note.
       </p>
       <Button
         type="button"
@@ -755,6 +784,8 @@ export function NewAssessmentPage() {
         Use transcript as clinical note
       </Button>
     </div>
+      </div>
+    ) : null}
   </div>
 
   <div className="mt-2 w-fit">
@@ -800,9 +831,21 @@ export function NewAssessmentPage() {
         isReviewed={isNlpReviewed}
         onReviewedChange={setIsNlpReviewed}
       />
+      <p className="mt-2 rounded-2xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold leading-5 text-blue-900">
+        Extracted values were copied into the editable structured fields below. Confirm or edit them before continuing.
+      </p>
     </div>
   ) : null}
 </div>
+                  <div className="flex flex-col gap-1 border-b border-slate-100 pb-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-sm font-black text-slate-900">Editable structured intake</p>
+                      <p className="mt-0.5 text-xs font-semibold text-slate-500">These fields are used for decision support after clinician confirmation.</p>
+                    </div>
+                    {nlpExtraction ? (
+                      <Badge className="border-blue-200 bg-blue-50 text-blue-800">Updated from extraction</Badge>
+                    ) : null}
+                  </div>
                   <label className={fieldClass}>
                     Chief complaint
                     <input value={chiefComplaint} onChange={(event) => setChiefComplaint(event.target.value)} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5" placeholder="Example: chest pain and shortness of breath" />
@@ -980,7 +1023,7 @@ export function NewAssessmentPage() {
           </div>
         </section>
 
-        <aside className="flex min-h-[240px] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/95 shadow-soft backdrop-blur xl:sticky xl:top-6 xl:self-start">
+        <aside className="flex min-h-[240px] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/95 shadow-soft backdrop-blur 2xl:sticky 2xl:top-6 2xl:self-start">
           <div className="shrink-0 border-b border-slate-100 p-3">
             <h2 className="text-lg font-black text-slate-950">Live intake summary</h2>
             <p className="mt-1 text-sm text-slate-600">Patient context, vitals, and workflow status.</p>
@@ -1005,21 +1048,11 @@ export function NewAssessmentPage() {
               <VitalsGrid vitals={vitals} age={patient.age} compact />
             </div>
             <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5">
-              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.25em] text-slate-500">Selected risk flags</p>
-              <div className="flex flex-wrap gap-2">
-                {riskFlags.length ? riskFlags.map((flag) => <Badge key={flag} className="border-red-200 bg-red-50 text-red-800">{flag}</Badge>) : <span className="text-sm text-slate-500">None selected</span>}
-              </div>
-            </div>
-            <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5">
-              <p className="mb-2 text-[11px] font-black uppercase tracking-[0.25em] text-slate-500">Comorbidities</p>
-              <div className="flex flex-wrap gap-2">
-                {comorbidities.length ? comorbidities.map((item) => <Badge key={item} className="border-blue-200 bg-blue-50 text-blue-800">{item}</Badge>) : <span className="text-sm text-slate-500">None selected</span>}
-              </div>
-            </div>
-            <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5">
               <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-500">Workflow status</p>
-              <p className="mt-2 text-sm font-semibold text-slate-800">{missingFields.length ? 'Step needs attention' : 'Ready for prediction'}</p>
-              <p className="mt-1 text-sm text-slate-600">ESI decision-support workflow.</p>
+              <p className="mt-2 text-sm font-semibold text-slate-800">
+                {needsNlpReview ? 'NLP review required' : missingFields.length ? 'Step needs attention' : 'Ready for prediction'}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">Decision support only. Clinician review remains required.</p>
             </div>
             {missingFields.length ? (
               <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800">
