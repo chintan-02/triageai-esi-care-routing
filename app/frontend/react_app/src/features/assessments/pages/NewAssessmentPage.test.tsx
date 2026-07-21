@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NewAssessmentPage } from './NewAssessmentPage';
 
 const { createPrediction, extractClinicalIntake } = vi.hoisted(() => ({
@@ -31,6 +31,115 @@ vi.mock('@/context/ToastContext', () => ({
 }));
 
 describe('NewAssessmentPage', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('renders local microphone recording controls in the transcript section', () => {
+    render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+
+    expect(screen.getByRole('button', { name: /start recording/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /stop recording/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /clear recording/i })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Audio recording is for local clinician review only. Transcript text must be reviewed before extraction or prediction.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('shows a safe fallback when browser recording is unsupported', () => {
+    const getUserMedia = vi.fn();
+    vi.stubGlobal('MediaRecorder', undefined);
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+
+    render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start recording/i }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/not supported in this browser/i);
+    expect(screen.getByLabelText(/transcript text/i)).toBeEnabled();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(extractClinicalIntake).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
+  });
+
+  it('records locally, stops microphone tracks, and renders playback', async () => {
+    const stopTrack = vi.fn();
+    const getUserMedia = vi.fn().mockResolvedValue({
+      getTracks: () => [{ stop: stopTrack }]
+    });
+
+    class MockMediaRecorder {
+      state: RecordingState = 'inactive';
+      mimeType = 'audio/webm';
+      ondataavailable: ((event: BlobEvent) => void) | null = null;
+      onstop: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+
+      start() {
+        this.state = 'recording';
+      }
+
+      stop() {
+        this.state = 'inactive';
+        this.ondataavailable?.({
+          data: new Blob(['recorded-audio'], { type: this.mimeType })
+        } as BlobEvent);
+        this.onstop?.(new Event('stop'));
+      }
+    }
+
+    const BrowserUrl = URL;
+    const createObjectUrl = vi.fn(() => 'blob:local-recording');
+    class MockUrl extends BrowserUrl {
+      static createObjectURL = createObjectUrl;
+      static revokeObjectURL = vi.fn();
+    }
+
+    vi.stubGlobal('MediaRecorder', MockMediaRecorder);
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+    vi.stubGlobal('URL', MockUrl);
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <NewAssessmentPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/patient name/i), { target: { value: 'Alex Morgan' } });
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start recording/i }));
+
+    await waitFor(() => expect(screen.getByText(/recording locally/i)).toBeInTheDocument());
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
+
+    fireEvent.click(screen.getByRole('button', { name: /stop recording/i }));
+
+    await waitFor(() => expect(screen.getByLabelText(/recorded audio playback/i)).toBeInTheDocument());
+    expect(screen.getByLabelText(/recorded audio playback/i)).toHaveAttribute('src', 'blob:local-recording');
+    expect(stopTrack).toHaveBeenCalled();
+    expect(createObjectUrl).toHaveBeenCalledOnce();
+    expect(extractClinicalIntake).not.toHaveBeenCalled();
+    expect(createPrediction).not.toHaveBeenCalled();
+    unmount();
+    expect(MockUrl.revokeObjectURL).toHaveBeenCalledWith('blob:local-recording');
+  });
+
   it('fills the clinical note with the demo scenario without running extraction or prediction', () => {
     render(
       <MemoryRouter>

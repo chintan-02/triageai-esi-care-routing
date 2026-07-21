@@ -1,6 +1,6 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, ClipboardCheck, FileText, Loader2, Sparkles, UserRound } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardCheck, FileText, Loader2, Mic, Sparkles, Square, Trash2, UserRound } from 'lucide-react';
 import { createPrediction } from '@/api/predictions';
 import { useToast } from '@/context/ToastContext';
 import { comorbidityOptions, riskFlagOptions } from '@/data/mockData';
@@ -54,6 +54,7 @@ const steps = [
 ] as const;
 
 type StepId = (typeof steps)[number]['id'];
+type RecordingState = 'idle' | 'requesting' | 'recording' | 'stopping';
 
 const stepCardClass = 'flex flex-col rounded-[1.2rem] border border-slate-200 bg-white p-3 shadow-[0_10px_30px_-24px_rgba(15,23,42,0.35)]';
 const fieldClass = 'space-y-1.5 text-sm font-semibold text-slate-700';
@@ -65,6 +66,32 @@ function displayValue(value: string, fallback = 'Not entered') {
 function toNullableText(value: string) {
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function microphoneErrorMessage(error: unknown) {
+  const errorName = error instanceof DOMException
+    ? error.name
+    : typeof error === 'object' && error && 'name' in error
+      ? String(error.name)
+      : '';
+
+  if (errorName === 'NotAllowedError' || errorName === 'SecurityError') {
+    return 'Microphone permission was denied. Allow microphone access in your browser and try again.';
+  }
+
+  if (errorName === 'NotFoundError' || errorName === 'DevicesNotFoundError') {
+    return 'No microphone is available. Connect a microphone and try again.';
+  }
+
+  if (['NotReadableError', 'TrackStartError', 'AbortError'].includes(errorName)) {
+    return 'The microphone is unavailable or already in use. Close other audio apps and try again.';
+  }
+
+  return 'The microphone could not be started. Check browser permissions and try again.';
+}
+
+function stopMediaStream(stream: MediaStream | null) {
+  stream?.getTracks().forEach((track) => track.stop());
 }
 
 function buildPredictionPayload(
@@ -125,6 +152,9 @@ export function NewAssessmentPage() {
   const [duration, setDuration] = useState('');
   const [clinicalNote, setClinicalNote] = useState('');
   const [transcriptText, setTranscriptText] = useState('');
+  const [recordingState, setRecordingState] = useState<RecordingState>('idle');
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
   const [nlpExtraction, setNlpExtraction] = useState<ClinicalIntakeExtractionResponse | null>(null);
   const [isExtractingNlp, setIsExtractingNlp] = useState(false);
   const [nlpError, setNlpError] = useState<string | null>(null);
@@ -135,6 +165,36 @@ export function NewAssessmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingUrlRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      const recorder = mediaRecorderRef.current;
+
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        recorder.onerror = null;
+        recorder.stop();
+      }
+
+      stopMediaStream(mediaStreamRef.current);
+      mediaRecorderRef.current = null;
+      mediaStreamRef.current = null;
+
+      if (recordingUrlRef.current) {
+        URL.revokeObjectURL(recordingUrlRef.current);
+        recordingUrlRef.current = null;
+      }
+    };
+  }, []);
 
   const missingFields = useMemo(
     () => getMissingIntakeFields({ patient, chiefComplaint, symptomText, duration }),
@@ -207,6 +267,112 @@ export function NewAssessmentPage() {
     setNlpExtraction(null);
     setIsNlpReviewed(false);
     setNlpError(null);
+  };
+
+  const handleStartRecording = async () => {
+    setRecordingError(null);
+
+    if (
+      typeof MediaRecorder === 'undefined'
+      || !navigator.mediaDevices?.getUserMedia
+    ) {
+      setRecordingError(
+        'Microphone recording is not supported in this browser. You can still enter transcript text manually.'
+      );
+      return;
+    }
+
+    setRecordingState('requesting');
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      if (!isMountedRef.current) {
+        stopMediaStream(stream);
+        return;
+      }
+
+      mediaStreamRef.current = stream;
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        stopMediaStream(mediaStreamRef.current);
+        mediaStreamRef.current = null;
+        mediaRecorderRef.current = null;
+
+        if (!isMountedRef.current) return;
+
+        const chunks = audioChunksRef.current;
+        audioChunksRef.current = [];
+
+        if (chunks.length > 0) {
+          const recording = new Blob(chunks, {
+            type: recorder.mimeType || chunks[0].type || 'audio/webm'
+          });
+
+          if (recordingUrlRef.current) {
+            URL.revokeObjectURL(recordingUrlRef.current);
+          }
+
+          const nextUrl = URL.createObjectURL(recording);
+          recordingUrlRef.current = nextUrl;
+          setRecordingUrl(nextUrl);
+        } else {
+          setRecordingError('No audio was captured. Please try recording again.');
+        }
+
+        setRecordingState('idle');
+      };
+
+      recorder.onerror = () => {
+        if (isMountedRef.current) {
+          setRecordingError('Audio recording stopped unexpectedly. Please try again.');
+          setRecordingState('idle');
+        }
+        stopMediaStream(mediaStreamRef.current);
+        mediaStreamRef.current = null;
+        mediaRecorderRef.current = null;
+      };
+
+      recorder.start();
+      setRecordingState('recording');
+    } catch (error) {
+      stopMediaStream(mediaStreamRef.current);
+      mediaStreamRef.current = null;
+      mediaRecorderRef.current = null;
+
+      if (isMountedRef.current) {
+        setRecordingState('idle');
+        setRecordingError(microphoneErrorMessage(error));
+      }
+    }
+  };
+
+  const handleStopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+
+    setRecordingState('stopping');
+    recorder.stop();
+    stopMediaStream(mediaStreamRef.current);
+    mediaStreamRef.current = null;
+  };
+
+  const handleClearRecording = () => {
+    if (recordingUrlRef.current) {
+      URL.revokeObjectURL(recordingUrlRef.current);
+      recordingUrlRef.current = null;
+    }
+    setRecordingUrl(null);
+    setRecordingError(null);
   };
   
   const handleExtractClinicalNote = async () => {
@@ -428,7 +594,75 @@ export function NewAssessmentPage() {
   </label>
 
   <div className="mt-3 rounded-2xl border border-blue-100 bg-white/80 p-3">
-    <p className="text-sm font-black text-blue-950">Speech / transcript</p>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-sm font-black text-blue-950">Speech / transcript</p>
+      <Badge className="border-emerald-200 bg-emerald-50 text-emerald-800">
+        Local recording only
+      </Badge>
+    </div>
+    <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          className="px-3 py-2 text-xs"
+          disabled={recordingState !== 'idle'}
+          onClick={handleStartRecording}
+        >
+          {recordingState === 'requesting' ? <Loader2 className="animate-spin" size={16} /> : <Mic size={16} />}
+          {recordingState === 'requesting' ? 'Requesting microphone' : 'Start recording'}
+        </Button>
+        <Button
+          type="button"
+          variant="danger"
+          className="px-3 py-2 text-xs"
+          disabled={recordingState !== 'recording'}
+          onClick={handleStopRecording}
+        >
+          <Square size={14} />
+          Stop recording
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="px-3 py-2 text-xs"
+          disabled={!recordingUrl || recordingState !== 'idle'}
+          onClick={handleClearRecording}
+        >
+          <Trash2 size={16} />
+          Clear recording
+        </Button>
+        {recordingState === 'recording' ? (
+          <span className="inline-flex items-center gap-2 text-xs font-bold text-red-700" role="status">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-600" />
+            Recording locally
+          </span>
+        ) : null}
+        {recordingState === 'stopping' ? (
+          <span className="text-xs font-semibold text-slate-600" role="status">Preparing playback…</span>
+        ) : null}
+      </div>
+
+      {recordingUrl ? (
+        <audio
+          aria-label="Recorded audio playback"
+          className="mt-3 h-10 w-full"
+          controls
+          preload="metadata"
+          src={recordingUrl}
+        />
+      ) : null}
+
+      {recordingError ? (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900" role="alert">
+          {recordingError}
+        </div>
+      ) : null}
+
+      <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
+        Audio recording is for local clinician review only. Transcript text must be reviewed before extraction or prediction.
+      </p>
+    </div>
     <label className="mt-2 flex flex-col gap-1.5 text-sm font-semibold text-slate-700">
       Transcript text
       <textarea
