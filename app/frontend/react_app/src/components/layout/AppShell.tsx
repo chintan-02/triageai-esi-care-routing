@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { MobileNav } from './MobileNav';
 
 export function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { pathname } = useLocation();
+  const isNewAssessment = pathname === '/new-assessment';
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-clinical-surface text-slate-900">
@@ -16,7 +18,7 @@ export function AppShell() {
           <Topbar onOpenMenu={() => setMobileNavOpen(true)} />
           <main className="flex-1">
             <div className="clinical-grid min-h-[calc(100vh-76px)] px-4 pb-8 pt-5 sm:px-6 sm:pt-6 lg:px-8 lg:pt-8">
-              <div className="mx-auto w-full max-w-7xl">
+              <div className={`mx-auto w-full ${isNewAssessment ? 'max-w-[1360px]' : 'max-w-7xl'}`}>
                 <Outlet />
               </div>
             </div>
