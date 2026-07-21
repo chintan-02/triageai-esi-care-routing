@@ -852,3 +852,30 @@ docker compose down
 ```
 
 Docker Compose uses a local SQLite volume for demo data and a generated reports volume for PDF outputs. The React frontend connects to the FastAPI backend through `VITE_API_BASE_URL=http://localhost:8001`.
+
+---
+
+## Environment Configuration
+
+Real environment files are intentionally ignored by Git.
+
+Backend local example:
+
+```bash
+cp .env.example .env
+```
+
+Frontend local example:
+
+```bash
+cp app/frontend/react_app/.env.example app/frontend/react_app/.env
+```
+
+The React frontend uses Vite variables:
+
+```text
+VITE_USE_MOCK_API=false
+VITE_API_BASE_URL=http://localhost:8001
+```
+
+Docker Compose defines safe demo environment values inline for local full-stack testing. Do not commit real `.env` files, secrets, generated reports, SQLite databases, `node_modules`, or `dist` outputs.
