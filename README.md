@@ -815,3 +815,40 @@ The Clinical Intake NLP Safety Layer is currently implemented as a backend endpo
 This repository is intended for portfolio, educational, research, and software-engineering demonstration purposes.
 
 It is not intended for live clinical use without the validation, governance, security, privacy, and regulatory controls described in this README.
+
+---
+
+## Run with Docker Compose
+
+The full local demo can run with Docker Compose using the FastAPI backend and React frontend.
+
+```bash
+docker compose up --build
+```
+
+Backend:
+
+```text
+http://localhost:8001
+```
+
+Frontend:
+
+```text
+http://localhost:5173
+```
+
+Health checks:
+
+```bash
+curl http://localhost:8001/health
+curl http://localhost:8001/ready
+```
+
+Stop the stack:
+
+```bash
+docker compose down
+```
+
+Docker Compose uses a local SQLite volume for demo data and a generated reports volume for PDF outputs. The React frontend connects to the FastAPI backend through `VITE_API_BASE_URL=http://localhost:8001`.
