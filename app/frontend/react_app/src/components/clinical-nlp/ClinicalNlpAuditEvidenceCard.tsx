@@ -1,9 +1,11 @@
-import { AlertTriangle, CheckCircle2, FileSearch, ShieldAlert } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, CheckCircle2, ChevronDown, FileSearch, ShieldAlert } from 'lucide-react';
 import type { AssessmentAuditEvent } from '@/types/api';
 import { Badge } from '@/components/ui/Badge';
 
 type ClinicalNlpAuditEvidenceCardProps = {
   event: AssessmentAuditEvent;
+  collapseEvidence?: boolean;
 };
 
 const evidenceFields = new Set([
@@ -100,8 +102,11 @@ function evidenceItems(value: unknown) {
 }
 
 export function ClinicalNlpAuditEvidenceCard({
-  event
+  event,
+  collapseEvidence = false
 }: ClinicalNlpAuditEvidenceCardProps) {
+  const [isEvidenceOpen, setIsEvidenceOpen] = useState(false);
+
   if (event.action !== 'nlp_extraction_reviewed') return null;
 
   const details = detailsFor(event);
@@ -201,7 +206,37 @@ export function ClinicalNlpAuditEvidenceCard({
           </div>
         ) : null}
 
-        {evidence.length ? (
+        {evidence.length && collapseEvidence ? (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white/90">
+            <button
+              type="button"
+              aria-controls={`nlp-evidence-${event.audit_id}`}
+              aria-expanded={isEvidenceOpen}
+              className="focus-ring flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left text-sm font-black text-slate-800 hover:bg-slate-50"
+              onClick={() => setIsEvidenceOpen((open) => !open)}
+            >
+              <span>{isEvidenceOpen ? 'Hide evidence snippets' : `View evidence snippets (${evidence.length})`}</span>
+              <ChevronDown className={`shrink-0 transition-transform ${isEvidenceOpen ? 'rotate-180' : ''}`} size={17} />
+            </button>
+            {isEvidenceOpen ? (
+              <div id={`nlp-evidence-${event.audit_id}`} className="grid gap-2 border-t border-slate-200 p-3.5 lg:grid-cols-2">
+                {evidence.map((item, index) => (
+                  <div key={`${item.field}-${index}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        {readableField(item.field)}
+                      </p>
+                      <Badge className="border-slate-200 bg-white text-slate-700">{item.value}</Badge>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-700">“{item.snippet}”</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {evidence.length && !collapseEvidence ? (
           <div className="rounded-2xl border border-slate-200 bg-white/90 p-3.5">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">
               Evidence snippets

@@ -77,22 +77,26 @@ function FinalDecisionBanner({ predicted, final, confidence, latency, status, ru
 }
 
 function DecisionComparison({ predicted, final, rules }: { predicted: EsiLevel; final: EsiLevel; rules: RuleHit[] }) {
+  const changed = final !== predicted;
   const ruleSummary = rules.length ? rules.map((rule) => rule.label).join(' + ') : 'No safety-rule escalation triggered';
   return (
     <Card>
-      <CardHeader title="Why the final ESI changed" description="Safety-rule escalation is shown for routing transparency and clinician review." />
+      <CardHeader
+        title={changed ? 'Why the final ESI changed' : 'Why the final ESI was retained'}
+        description="Safety-rule escalation is shown for routing transparency and clinician review."
+      />
       <CardBody>
-        <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-center">
+        <div className="grid gap-3">
           <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-black uppercase tracking-wide text-slate-500">Model prediction</p>
             <div className="mt-3"><EsiBadge level={predicted} prefix="Pred" /></div>
           </div>
-          <ArrowRight className="hidden text-slate-300 md:block" />
+          <ArrowRight className="mx-auto rotate-90 text-slate-300" />
           <div className={`rounded-3xl border p-4 ${rules.length ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
             <p className="text-xs font-black uppercase tracking-wide text-slate-500">Safety gate result</p>
             <p className="mt-3 text-sm font-bold leading-6 text-slate-800">{ruleSummary}</p>
           </div>
-          <ArrowRight className="hidden text-slate-300 md:block" />
+          <ArrowRight className="mx-auto rotate-90 text-slate-300" />
           <div className="rounded-3xl border border-slate-200 bg-slate-950 p-4 text-white">
             <p className="text-xs font-black uppercase tracking-wide text-slate-300">Final decision</p>
             <p className="font-data mt-3 text-2xl font-black">ESI {final}</p>
@@ -219,6 +223,8 @@ function auditActionTitle(action: string): string {
       return 'Assessment created';
     case 'prediction_generated':
       return 'Prediction generated';
+    case 'nlp_extraction_reviewed':
+      return 'NLP extraction reviewed';
     case 'clinician_review_accept':
       return 'Clinician review accepted';
     case 'clinician_review_override':
@@ -275,6 +281,17 @@ type AuditEventWithRaw = AuditEvent & { rawEvent: AssessmentAuditEvent };
 type AssessmentRecordWithRawAudit = Omit<AssessmentRecord, 'auditTrail'> & {
   auditTrail: AuditEventWithRaw[];
 };
+
+const detailTabs = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'intake', label: 'Intake' },
+  { id: 'model-safety', label: 'Model & Safety' },
+  { id: 'nlp-evidence', label: 'NLP Evidence' },
+  { id: 'audit-trail', label: 'Audit Trail' },
+  { id: 'report', label: 'Report' }
+] as const;
+
+type DetailTabId = (typeof detailTabs)[number]['id'];
 
 function mapAuditTrail(detail: AssessmentDetail): AuditEventWithRaw[] {
   return detail.audit_trail.map((event) => ({
@@ -376,6 +393,7 @@ export function AssessmentDetailPage() {
   const [reviewNote, setReviewNote] = useState('');
   const [finalDecision, setFinalDecision] = useState<EsiLevel>(3);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<DetailTabId>('overview');
 
   const canAccept = hasPermission(user?.role, 'review:accept');
   const canOverride = hasPermission(user?.role, 'review:override');
@@ -465,6 +483,9 @@ export function AssessmentDetailPage() {
   const safetyFinalDecision = prediction.finalEsi;
   const currentDisplayedFinalDecision = review.status === 'overridden' && review.finalDecision !== safetyFinalDecision ? review.finalDecision : safetyFinalDecision;
   const displayedFinalDecision = canEditFinalDecision ? finalDecision : currentDisplayedFinalDecision;
+  const nlpAuditEvents = record.auditTrail.filter(
+    (event) => event.rawEvent.action === 'nlp_extraction_reviewed'
+  );
 
   const saveReviewAction = async (status: ClinicianReview['status']) => {
     if (status === 'accepted' && !canAccept) {
@@ -539,126 +560,289 @@ export function AssessmentDetailPage() {
         }
       />
 
-      <div className="space-y-6">
+      <div>
         <FinalDecisionBanner predicted={prediction.predictedEsi} final={prediction.finalEsi} confidence={prediction.confidence} latency={prediction.latencyMs} status={review.status} rules={prediction.ruleHits} />
-        {prediction.finalEsi !== prediction.predictedEsi ? <DecisionComparison predicted={prediction.predictedEsi} final={prediction.finalEsi} rules={prediction.ruleHits} /> : null}
       </div>
 
-      <div className="mt-5 grid items-start gap-5 xl:grid-cols-[300px_minmax(0,1fr)_360px]">
-        <Card className="self-start p-4">
-          <p className="mb-2 text-center text-xs font-bold uppercase tracking-wide text-slate-500">Acuity routing</p>
-          <AcuityGauge finalEsi={prediction.finalEsi} predictedEsi={prediction.predictedEsi} />
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-center">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Confidence</p>
-              <p className="font-data mt-1 text-xl font-bold text-slate-950">{formatPercent(prediction.confidence)}</p>
+      <Card className="mt-5">
+        <CardHeader
+          title="Clinical Review / Sign-off"
+          description="Complete the clinician review after considering the model output and any safety-rule escalation."
+        />
+        <CardBody className="space-y-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current reviewer</p>
+              <p className="mt-1 font-bold text-slate-950">{reviewerName}</p>
+              <p className="text-sm text-slate-500">{review.status === 'pending' ? 'Pending assignment' : review.role}</p>
+              <p className="mt-2 text-xs font-semibold text-slate-500">Signed in: {actingReviewer} ({user?.role ?? 'Nurse'})</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-center">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Latency</p>
-              <div className="mt-1.5 flex justify-center"><LatencyValue ms={prediction.latencyMs} size="sm" /></div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Review status</p>
+              <div className="mt-2"><ReviewStatusBadge status={review.status} /></div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {review.status === 'pending'
+                  ? 'Clinician sign-off is required for the current final routing decision.'
+                  : 'The recorded clinician decision remains available in the assessment audit trail.'}
+              </p>
             </div>
           </div>
-          <div className="mt-2 rounded-2xl border border-slate-200 bg-white p-2.5 text-center">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Review status</p>
-            <div className="mt-1.5 flex justify-center"><ReviewStatusBadge status={review.status} /></div>
+
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(240px,0.75fr)_minmax(0,1.5fr)]">
+            <label className="space-y-2 text-sm font-semibold text-slate-700">
+              Final clinician decision
+              <select value={displayedFinalDecision} onChange={(event) => setFinalDecision(Number(event.target.value) as EsiLevel)} disabled={!canEditFinalDecision} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 disabled:bg-slate-100 disabled:text-slate-500">
+                <option value={1}>ESI 1</option><option value={2}>ESI 2</option><option value={3}>ESI 3</option><option value={4}>ESI 4</option><option value={5}>ESI 5</option>
+              </select>
+              {isNurseRole ? <span className="block text-xs font-semibold leading-5 text-slate-500">Read-only for Nurse role. Accept confirms the current final routing decision.</span> : null}
+            </label>
+            <label className="space-y-2 text-sm font-semibold text-slate-700">
+              Review note / override reason
+              <textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} rows={3} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3" />
+            </label>
           </div>
-        </Card>
 
-        <div className="min-w-0 space-y-5">
-          <Card>
-            <CardHeader title="Patient intake" description="Structured patient context used by the model and safety rules." />
-            <CardBody className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">MRN</p><p className="font-data mt-1 break-words font-bold text-slate-950">{intake.patient.mrn}</p></div>
-                <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Demographics</p><p className="mt-1 font-bold text-slate-950">{intake.patient.age} • {intake.patient.sex || '—'}</p></div>
-                <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Arrival</p><p className="mt-1 font-bold text-slate-950">{intake.patient.arrivalMode}</p></div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Chief complaint</p>
-                <p className="mt-1.5 break-words font-bold text-slate-950">{intake.chiefComplaint}</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{intake.symptomText}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Selected risk flags</p>
-                <p className="mt-1.5 text-sm font-semibold leading-6 text-slate-700">{intake.riskFlags.length ? intake.riskFlags.join(', ') : 'None selected'}</p>
-              </div>
-              <VitalsGrid vitals={intake.vitals} age={intake.patient.age} />
-            </CardBody>
-          </Card>
+          {overrideLocked && isNurseRole ? <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3 text-sm text-amber-800"><div className="font-bold">Override requires Doctor role</div><p className="mt-1">Nurse users can accept the current final routing decision. Doctor role is required to change the final ESI.</p></div> : null}
 
-          <Card>
-            <CardHeader title="Model output" description="Notebook-aligned model output for review, audit, and routing transparency." />
-            <CardBody className="grid min-w-0 gap-5 lg:grid-cols-2">
-              <div><p className="mb-4 text-sm font-bold text-slate-700">Class probabilities</p><ProbabilityBars probabilities={prediction.probabilities} /></div>
-              <div className="min-w-0 space-y-3">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Model family/version</p><p className="mt-1 font-bold text-slate-950">{prediction.modelFamily}</p><p className="font-data mt-1 text-sm text-slate-600 [overflow-wrap:anywhere]">{prediction.modelVersion}</p></div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Threshold profile</p><p className="font-data mt-1 text-sm font-bold text-slate-950 [overflow-wrap:anywhere]">{prediction.thresholdProfile}</p></div>
-                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm font-semibold leading-6 text-blue-900">Raw model probabilities are shown for transparency; they are not calibrated probabilities.</div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Explanation</p><p className="mt-1 text-sm leading-6 text-slate-700">{prediction.explanation}</p></div>
-              </div>
-            </CardBody>
-          </Card>
+          <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs font-semibold leading-5 text-slate-500">Decision support only. Clinician judgment remains required for final routing.</p>
+            <div className="grid shrink-0 gap-3 sm:grid-cols-2">
+              <Button type="button" disabled={isSaving || !canAccept} onClick={() => saveReviewAction('accepted')}><CheckCircle2 size={17} /> Accept</Button>
+              <Button type="button" variant="secondary" disabled={isSaving || !canOverride} title={!canOverride ? 'Doctor role required to override final routing decision.' : undefined} onClick={() => saveReviewAction('overridden')}><ShieldAlert size={17} /> Override</Button>
+            </div>
+          </div>
+          {!canAccept && !canOverride ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600"><div className="flex gap-2 font-bold text-slate-800"><AlertTriangle size={16} /> Review unavailable</div><p className="mt-1">Your role can view this record but cannot save clinical review decisions.</p></div> : null}
+        </CardBody>
+      </Card>
 
-          <Card>
-            <CardHeader title="Audit trail" description="Traceability for prediction, escalation, and review events." />
-            <CardBody className="pt-4">
-              <div className="space-y-2.5">
-                {record.auditTrail.map((event) => (
-                  <div key={event.id} className="space-y-2.5">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="font-bold text-slate-950">{event.action}</p><p className="text-xs font-semibold text-slate-500">{formatDateTime(event.timestamp)}</p></div>
-                      <p className="mt-1 text-sm text-slate-600">{event.details}</p>
-                      {event.metadata?.length ? (
-                        <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-                          {event.metadata.map((item) => (
-                            <div key={`${event.id}-${item.label}`} className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                              <dt className="text-[10px] font-black uppercase tracking-wide text-slate-400">{item.label}</dt>
-                              <dd className="mt-0.5 text-xs font-semibold text-slate-700 [overflow-wrap:anywhere]">{item.value}</dd>
-                            </div>
-                          ))}
-                        </dl>
-                      ) : null}
-                      <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400 [overflow-wrap:anywhere]">{event.actor}</p>
+      <div
+        aria-label="Assessment review sections"
+        className="hide-scrollbar mt-5 flex gap-1.5 overflow-x-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-card"
+        role="tablist"
+      >
+        {detailTabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              id={`assessment-tab-${tab.id}`}
+              type="button"
+              role="tab"
+              aria-controls="assessment-tab-panel"
+              aria-selected={isActive}
+              className={`focus-ring min-w-fit flex-1 rounded-2xl px-4 py-2.5 text-sm font-bold transition ${
+                isActive
+                  ? 'bg-clinical-navy text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+              }`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <main className="mt-5 min-w-0">
+        <div
+          id="assessment-tab-panel"
+          role="tabpanel"
+          aria-labelledby={`assessment-tab-${activeTab}`}
+        >
+            {activeTab === 'overview' ? (
+              <div className="space-y-6">
+                <div className="grid items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+                  <Card className="self-start p-4">
+                    <p className="mb-2 text-center text-xs font-bold uppercase tracking-wide text-slate-500">Acuity routing</p>
+                    <AcuityGauge finalEsi={prediction.finalEsi} predictedEsi={prediction.predictedEsi} />
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-center">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Confidence</p>
+                        <p className="font-data mt-1 text-xl font-bold text-slate-950">{formatPercent(prediction.confidence)}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-center">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Latency</p>
+                        <div className="mt-1.5 flex justify-center"><LatencyValue ms={prediction.latencyMs} size="sm" /></div>
+                      </div>
                     </div>
-                    <ClinicalNlpAuditEvidenceCard event={event.rawEvent} />
+                    <div className="mt-2 rounded-2xl border border-slate-200 bg-white p-2.5 text-center">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Review status</p>
+                      <div className="mt-1.5 flex justify-center"><ReviewStatusBadge status={review.status} /></div>
+                    </div>
+                  </Card>
+                  <DecisionComparison predicted={prediction.predictedEsi} final={prediction.finalEsi} rules={prediction.ruleHits} />
+                </div>
+                <Card>
+                  <CardHeader
+                    title="Safety escalation summary"
+                    description="High-level routing context for clinician review."
+                  />
+                  <CardBody className="space-y-3">
+                    <div className={`rounded-2xl border p-4 ${prediction.ruleHits.length ? 'border-red-200 bg-red-50 text-red-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>
+                      <div className="flex items-start gap-3">
+                        {prediction.ruleHits.length ? <ShieldAlert className="mt-0.5 shrink-0" size={20} /> : <CheckCircle2 className="mt-0.5 shrink-0" size={20} />}
+                        <div>
+                          <p className="font-black">
+                            {prediction.ruleHits.length ? 'Safety rules affected the routing review' : 'No safety-rule escalation triggered'}
+                          </p>
+                          <p className="mt-1 text-sm leading-6">
+                            {prediction.ruleHits.length
+                              ? prediction.ruleHits.map((rule) => rule.label).join(' • ')
+                              : `The safety gate retained the model-supported final ESI ${prediction.finalEsi}.`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-semibold leading-6 text-blue-900">
+                      Decision support only. The final routing decision requires clinician review and is not a substitute for clinician judgment.
+                    </p>
+                  </CardBody>
+                </Card>
+              </div>
+            ) : null}
+
+            {activeTab === 'intake' ? (
+              <Card>
+                <CardHeader title="Patient intake" description="Structured patient context used by the model and safety rules." />
+                <CardBody className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">MRN</p><p className="font-data mt-1 break-words font-bold text-slate-950">{intake.patient.mrn}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Demographics</p><p className="mt-1 font-bold text-slate-950">{intake.patient.age} • {intake.patient.sex || '—'}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Arrival</p><p className="mt-1 font-bold text-slate-950">{intake.patient.arrivalMode}</p></div>
+                    <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Duration</p><p className="mt-1 font-bold text-slate-950">{intake.duration}</p></div>
                   </div>
-                ))}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Chief complaint</p>
+                    <p className="mt-1.5 break-words font-bold text-slate-950">{intake.chiefComplaint}</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{intake.symptomText}</p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Selected risk flags</p>
+                      <p className="mt-1.5 text-sm font-semibold leading-6 text-slate-700">{intake.riskFlags.length ? intake.riskFlags.join(', ') : 'None selected'}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Comorbidities</p>
+                      <p className="mt-1.5 text-sm font-semibold leading-6 text-slate-700">{intake.comorbidities.length ? intake.comorbidities.join(', ') : 'None selected'}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-3 text-sm font-bold text-slate-700">Vitals summary</p>
+                    <VitalsGrid vitals={intake.vitals} age={intake.patient.age} />
+                  </div>
+                </CardBody>
+              </Card>
+            ) : null}
+
+            {activeTab === 'model-safety' ? (
+              <div className="space-y-6">
+                <div className="grid items-start gap-6 lg:grid-cols-2">
+                  <Card>
+                    <CardHeader title="Model output" description="Model output for review, audit, and routing transparency." />
+                    <CardBody className="space-y-4">
+                      <div><p className="mb-4 text-sm font-bold text-slate-700">Class probabilities</p><ProbabilityBars probabilities={prediction.probabilities} /></div>
+                      <div className="min-w-0 space-y-3">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Model family/version</p><p className="mt-1 font-bold text-slate-950">{prediction.modelFamily}</p><p className="font-data mt-1 text-sm text-slate-600 [overflow-wrap:anywhere]">{prediction.modelVersion}</p></div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Threshold profile</p><p className="font-data mt-1 text-sm font-bold text-slate-950 [overflow-wrap:anywhere]">{prediction.thresholdProfile}</p></div>
+                      </div>
+                      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm font-semibold leading-6 text-blue-900">Raw model probabilities are shown for transparency; they are not calibrated probabilities.</div>
+                    </CardBody>
+                  </Card>
+                  <Card><CardHeader title="Safety rules" description="Shows exactly why final ESI can differ from model output." /><CardBody><RiskRuleList rules={prediction.ruleHits} /></CardBody></Card>
+                </div>
+
+                <Card>
+                  <CardHeader title="Model explanation" description="Supporting decision-support context for clinician review." />
+                  <CardBody>
+                    <p className="text-sm leading-6 text-slate-700">{prediction.explanation}</p>
+                    <p className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-semibold leading-6 text-blue-900">
+                      Decision support only. Safety-rule escalation and model context are not a substitute for clinician judgment.
+                    </p>
+                  </CardBody>
+                </Card>
               </div>
-            </CardBody>
-          </Card>
+            ) : null}
+
+            {activeTab === 'nlp-evidence' ? (
+              <div className="space-y-4">
+                <div className="rounded-3xl border border-blue-100 bg-blue-50/70 p-4 text-sm font-semibold leading-6 text-blue-900">
+                  NLP extraction evidence is decision-support audit context only. Extracted fields require clinician review before prediction.
+                </div>
+                {nlpAuditEvents.length ? (
+                  nlpAuditEvents.map((event) => (
+                    <ClinicalNlpAuditEvidenceCard key={event.id} event={event.rawEvent} collapseEvidence />
+                  ))
+                ) : (
+                  <Card>
+                    <CardBody className="text-center">
+                      <p className="font-bold text-slate-950">No NLP extraction evidence recorded</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">This assessment does not include a reviewed Clinical Intake NLP audit event.</p>
+                    </CardBody>
+                  </Card>
+                )}
+              </div>
+            ) : null}
+
+            {activeTab === 'audit-trail' ? (
+              <Card>
+                <CardHeader title="Audit trail" description="Traceability for assessment creation, NLP review, prediction, safety escalation, and clinician review events." />
+                <CardBody className="pt-4">
+                  {record.auditTrail.length ? (
+                    <div className="space-y-2.5">
+                      {record.auditTrail.map((event) => (
+                        <div key={event.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="font-bold text-slate-950">{event.action}</p><p className="text-xs font-semibold text-slate-500">{formatDateTime(event.timestamp)}</p></div>
+                          <p className="mt-1 text-sm text-slate-600">{event.details}</p>
+                          {event.metadata?.length ? (
+                            <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                              {event.metadata.map((item) => (
+                                <div key={`${event.id}-${item.label}`} className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                                  <dt className="text-[10px] font-black uppercase tracking-wide text-slate-400">{item.label}</dt>
+                                  <dd className="mt-0.5 text-xs font-semibold text-slate-700 [overflow-wrap:anywhere]">{item.value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          ) : null}
+                          <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400 [overflow-wrap:anywhere]">{event.actor}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-500">No assessment audit events are available.</p>
+                  )}
+                </CardBody>
+              </Card>
+            ) : null}
+
+            {activeTab === 'report' ? (
+              <Card>
+                <CardHeader
+                  title="PDF decision-support report"
+                  description="Generate a review-ready record of this assessment and its routing context."
+                  action={
+                    <Button type="button" onClick={downloadPdf} disabled={!canDownloadReport}>
+                      <Download size={17} /> Generate PDF Report
+                    </Button>
+                  }
+                />
+                <CardBody className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Assessment</p><p className="font-data mt-1 font-bold text-slate-950 [overflow-wrap:anywhere]">{record.id}</p></div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Final routing</p><p className="font-data mt-1 font-bold text-slate-950">ESI {prediction.finalEsi}</p></div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Clinician review</p><p className="mt-1 font-bold capitalize text-slate-950">{review.status}</p></div>
+                  </div>
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
+                    <p className="font-black">Decision-support report</p>
+                    <p className="mt-1">The generated PDF summarizes structured intake, model output, safety-rule escalation, and clinician review. It is decision support only and is not a substitute for clinician judgment.</p>
+                  </div>
+                  {!canDownloadReport ? (
+                    <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">Your current role can review this assessment but cannot generate reports.</p>
+                  ) : null}
+                </CardBody>
+              </Card>
+            ) : null}
         </div>
-
-        <aside className="space-y-5 xl:sticky xl:top-28 xl:self-start">
-          <Card><CardHeader title="Safety rules" description="Shows exactly why final ESI can differ from model output." /><CardBody><RiskRuleList rules={prediction.ruleHits} /></CardBody></Card>
-
-          <Card>
-            <CardHeader title="Clinician review" description="Human-in-the-loop accept or doctor override workflow." />
-            <CardBody className="space-y-3.5">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Current reviewer</p>
-                <p className="mt-1 font-bold text-slate-950">{reviewerName}</p>
-                <p className="text-sm text-slate-500">{review.status === 'pending' ? 'Pending assignment' : review.role}</p>
-                <p className="mt-2 text-xs font-semibold text-slate-500">Signed in: {actingReviewer} ({user?.role ?? 'Nurse'})</p>
-              </div>
-              <label className="space-y-2 text-sm font-semibold text-slate-700">
-                Final clinician decision
-                <select value={displayedFinalDecision} onChange={(event) => setFinalDecision(Number(event.target.value) as EsiLevel)} disabled={!canEditFinalDecision} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 disabled:bg-slate-100 disabled:text-slate-500">
-                  <option value={1}>ESI 1</option><option value={2}>ESI 2</option><option value={3}>ESI 3</option><option value={4}>ESI 4</option><option value={5}>ESI 5</option>
-                </select>
-                {isNurseRole ? <span className="block text-xs font-semibold leading-5 text-slate-500">Read-only for Nurse role. Accept confirms the current final routing decision.</span> : null}
-              </label>
-              {overrideLocked && isNurseRole ? <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3 text-sm text-amber-800"><div className="font-bold">Override requires Doctor role</div><p className="mt-1">Nurse users can accept the current final routing decision. Doctor role is required to change the final ESI.</p></div> : null}
-              <label className="space-y-2 text-sm font-semibold text-slate-700">Review note / override reason<textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} rows={4} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3" /></label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Button type="button" disabled={isSaving || !canAccept} onClick={() => saveReviewAction('accepted')}><CheckCircle2 size={17} /> Accept</Button>
-                <Button type="button" variant="secondary" disabled={isSaving || !canOverride} title={!canOverride ? 'Doctor role required to override final routing decision.' : undefined} onClick={() => saveReviewAction('overridden')}><ShieldAlert size={17} /> Override</Button>
-              </div>
-              {!canAccept && !canOverride ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600"><div className="flex gap-2 font-bold text-slate-800"><AlertTriangle size={16} /> Review unavailable</div><p className="mt-1">Your role can view this record but cannot save clinical review decisions.</p></div> : null}
-              <Button type="button" variant="secondary" className="w-full" onClick={downloadPdf} disabled={!canDownloadReport}><Download size={17} /> Generate PDF Report</Button>
-            </CardBody>
-          </Card>
-        </aside>
-      </div>
+      </main>
     </div>
   );
 }
