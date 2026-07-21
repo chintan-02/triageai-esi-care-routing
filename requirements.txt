@@ -1,5 +1,6 @@
 fastapi
 python-multipart
+azure-cognitiveservices-speech
 uvicorn[standard]
 pydantic
 pydantic-settings
