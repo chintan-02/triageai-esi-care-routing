@@ -32,12 +32,13 @@ from app.backend.db.models import Assessment, AuditLog, ClinicianReview, Predict
 
 REPORT_DISCLAIMER = (
     "This report supports structured triage review and ESI care routing. It is "
-    "decision-support only and does not replace clinician judgment, emergency "
-    "protocols, or required clinician review."
+    "decision-support only; clinician review and judgment remain required. It is "
+    "not diagnosis, not a treatment recommendation, and not a substitute for "
+    "emergency protocols."
 )
 
 MODEL_VS_CLINICIAN_NOTE = (
-    "Model recommendation was based on structured intake data. The clinician final "
+    "Model output was based on structured intake data. The clinician final "
     "ESI may differ when additional clinical context, safety concerns, or patient "
     "presentation justify an override. Overrides require a reason and are stored "
     "in the audit trail."
@@ -272,7 +273,7 @@ def generate_assessment_report_pdf(
         rightMargin=0.55 * inch,
         leftMargin=0.55 * inch,
         topMargin=0.5 * inch,
-        bottomMargin=0.55 * inch,
+        bottomMargin=0.72 * inch,
         title=f"TriageAI Assessment Report {assessment.id}",
     )
     styles = _styles()
@@ -745,7 +746,7 @@ def _add_model_and_safety_columns(
     column_gap = 0.18 * inch
     column_width = (content_width - column_gap) / 2
     left: list[Any] = [Paragraph("Model Output Probabilities", styles["section"])]
-    right: list[Any] = [Paragraph("Safety Rules & Recommendation", styles["section"])]
+    right: list[Any] = [Paragraph("Safety Rules & Review Context", styles["section"])]
 
     if prediction is None:
         left.append(Paragraph("No model prediction is stored for this assessment.", styles["body"]))
@@ -787,8 +788,6 @@ def _add_model_and_safety_columns(
                     [Paragraph("Signal", styles["table_header"]), Paragraph("Value", styles["table_header"])],
                     [Paragraph("Rules Fired", styles["value_bold"]), Paragraph(_safe(_rules_fired_text(prediction)), styles["value"])],
                     [Paragraph("Safety Gate Result", styles["value_bold"]), Paragraph(_safe(_safety_gate_result_text(prediction)), styles["value"])],
-                    [Paragraph("Explanation", styles["value_bold"]), Paragraph(_safe(_short_text(_pdf_explanation_text(prediction.explanation), 360)), styles["value"])],
-                    [Paragraph("Recommendation", styles["value_bold"]), Paragraph(_safe(_short_text(prediction.recommendation, 220)), styles["value"])],
                 ],
                 [column_width * 0.30, column_width * 0.70],
             )
@@ -807,6 +806,25 @@ def _add_model_and_safety_columns(
         )
     )
     story.append(grid)
+    if prediction is not None:
+        story.extend(
+            [
+                Spacer(1, 6),
+                _note_box(
+                    styles,
+                    content_width,
+                    "Clinician review context",
+                    _pdf_clinician_review_context(prediction),
+                ),
+                Spacer(1, 5),
+                _note_box(
+                    styles,
+                    content_width,
+                    "Explanation / Decision-support note",
+                    _pdf_explanation_text(prediction.explanation),
+                ),
+            ]
+        )
     story.append(Spacer(1, 8))
 
 
@@ -820,7 +838,7 @@ def _add_safety_rules_and_recommendation(
         story.append(
             KeepTogether(
                 [
-                    Paragraph("Safety Rules & Recommendation", styles["section"]),
+                    Paragraph("Safety Rules & Review Context", styles["section"]),
                     Paragraph("No model prediction is stored for this assessment.", styles["body"]),
                 ]
             )
@@ -829,7 +847,7 @@ def _add_safety_rules_and_recommendation(
 
     rules = _json_or_default(prediction.safety_rules_json, [])
     triggered = [rule for rule in rules if isinstance(rule, dict) and rule.get("triggered")]
-    section: list[Any] = [Paragraph("Safety Rules & Recommendation", styles["section"])]
+    section: list[Any] = [Paragraph("Safety Rules & Review Context", styles["section"])]
     if not triggered:
         section.append(_status_box(styles, content_width, "No safety-rule escalation triggered.", GREEN_SOFT, GREEN))
     else:
@@ -855,7 +873,12 @@ def _add_safety_rules_and_recommendation(
     section.extend(
         [
             Spacer(1, 6),
-            _note_box(styles, content_width, "Recommendation", prediction.recommendation),
+            _note_box(
+                styles,
+                content_width,
+                "Clinician review context",
+                _pdf_clinician_review_context(prediction),
+            ),
             Spacer(1, 5),
             _note_box(styles, content_width, "Clinical explanation", _pdf_explanation_text(prediction.explanation)),
             Spacer(1, 5),
@@ -1078,27 +1101,25 @@ def _add_clinical_nlp_review_evidence(
             ]
         )
 
-    context_rows: list[tuple[str, str]] = []
     safety_cues = _nlp_text_list(details.get("safety_cues"))
     missing_fields = _nlp_text_list(details.get("missing_fields"))
-    if safety_cues:
-        context_rows.append(("Safety cues", "; ".join(safety_cues)))
-    if missing_fields:
-        context_rows.append(("Missing fields", "; ".join(missing_fields)))
-    if context_rows:
-        story.extend(
-            [
-                Spacer(1, 5),
-                _key_value_table(styles, content_width, context_rows),
-            ]
-        )
+    context_rows = [
+        ("Safety cues", "; ".join(safety_cues) or "None detected"),
+        ("Missing fields", "; ".join(missing_fields) or "None identified"),
+    ]
+    story.extend(
+        [
+            Spacer(1, 5),
+            _key_value_table(styles, content_width, context_rows),
+        ]
+    )
 
     extracted_rows = _nlp_extracted_field_rows(details)
     if extracted_rows:
         story.extend(
             [
                 Spacer(1, 6),
-                Paragraph("Extracted fields", styles["value_bold"]),
+                Paragraph("Extracted fields summary", styles["value_bold"]),
                 Spacer(1, 3),
                 _key_value_table(styles, content_width, extracted_rows),
             ]
@@ -1123,8 +1144,8 @@ def _add_clinical_nlp_review_evidence(
         ]
         story.extend(
             [
-                Spacer(1, 6),
-                Paragraph("Evidence snippets", styles["value_bold"]),
+                PageBreak(),
+                Paragraph("Evidence snippets", styles["section"]),
                 Spacer(1, 3),
                 _standard_table(
                     table_rows,
@@ -1252,8 +1273,8 @@ def _add_audit_trail(
             [
                 Paragraph(_safe(_display(timestamp)), styles["value"]),
                 Paragraph(_safe(_display(action)), styles["value"]),
-                Paragraph(_safe(_display(actor)), styles["value"]),
-                Paragraph(_safe(_short_text(_details_text(details), 150)), styles["value"]),
+                Paragraph(_safe(_audit_actor_text(actor)), styles["value"]),
+                Paragraph(_safe(_details_text(details)), styles["value"]),
             ]
         )
     story.append(
@@ -1653,8 +1674,13 @@ def _footer(canvas: Any, document: SimpleDocTemplate) -> None:
     canvas.setFillColor(SLATE_MUTED)
     canvas.drawString(
         document.leftMargin,
-        footer_y,
-        "This report supports structured triage review and does not replace clinician judgment or emergency protocols.",
+        footer_y + 0.04 * inch,
+        "Decision-support only; clinician review and judgment remain required.",
+    )
+    canvas.drawString(
+        document.leftMargin,
+        footer_y - 0.07 * inch,
+        "Not diagnosis, not a treatment recommendation, and not a substitute for emergency protocols.",
     )
     canvas.drawRightString(page_width - document.rightMargin, footer_y, f"Page {document.page}")
     canvas.restoreState()
@@ -1686,10 +1712,38 @@ def _short_text(value: str, max_length: int) -> str:
 
 
 def _pdf_explanation_text(value: str) -> str:
-    return value.replace(
-        "is not a diagnosis or a substitute for clinician judgment",
-        "does not replace clinician judgment",
+    return (
+        value.replace(
+            "is not a diagnosis or a substitute for clinician judgment",
+            "is not a substitute for clinician judgment",
+        )
+        .replace(
+            "does not replace clinician judgment",
+            "is not a substitute for clinician judgment",
+        )
     )
+
+
+def _pdf_clinician_review_context(prediction: Prediction) -> str:
+    rules = _json_or_default(prediction.safety_rules_json, [])
+    safety_flags_present = prediction.final_esi <= 2 or any(
+        isinstance(rule, dict) and rule.get("triggered") for rule in rules
+    )
+    if safety_flags_present:
+        return (
+            "Safety flags require clinician review. Decision-support only; "
+            "clinician judgment remains required."
+        )
+    return (
+        "Clinician review required before final care routing. Decision-support only; "
+        "clinician judgment remains required."
+    )
+
+
+def _audit_actor_text(value: Any) -> str:
+    if value == "clinical_nlp_review_ui":
+        return "Clinical NLP review UI"
+    return _display(value)
 
 
 def _readable_detail_lines(payload: dict[str, Any]) -> list[str]:
