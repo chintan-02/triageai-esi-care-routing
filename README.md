@@ -713,14 +713,15 @@ Current coverage includes:
 
 ## Final Demo-Freeze Validation
 
-- Backend: 90 passing tests
-- Frontend: 12 test files and 38 passing tests
+- Backend: 96 passing tests
+- Frontend: 14 test files and 52 passing tests
 - React production build: passed
 - Docker Compose full-stack run: passed
 - Backend readiness: passed
 - Model loaded: `true`
 - Model feature count: `273`
 - Model class order: `ESI_3`, `ESI_4`, `ESI_5`
+- Decision threshold: `0.60`
 
 These results validate the local demonstration workflow; they do not represent clinical validation.
 
@@ -742,20 +743,60 @@ These results validate the local demonstration workflow; they do not represent c
 
 ---
 
-## Screenshot Plan — F.1
+## Product Walkthrough
 
-Final recruiter/professor screenshots are being prepared during the current documentation phase. The planned checklist is:
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Command Center</strong><br>
+      <img src="docs/assets/screenshots/01-command-center.png" alt="TriageAI Command Center showing operational totals, assessment status, and recent activity" width="100%">
+      <br><sub>Operational status, workload, and recent assessments are visible in one dashboard.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Review-first clinical intake</strong><br>
+      <img src="docs/assets/screenshots/02-new-intake-note.png" alt="New Intake workflow with an editable clinical note and explicit extraction controls" width="100%">
+      <br><sub>Clinical notes remain editable, and extraction begins only after an explicit user action.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Evidence-linked NLP review</strong><br>
+      <img src="docs/assets/screenshots/03-nlp-review-evidence.png" alt="Clinical NLP review showing extracted fields, source evidence, safety cues, and missing information" width="100%">
+      <br><sub>Extracted values are paired with evidence and must be reviewed before prediction.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Prediction and safety escalation</strong><br>
+      <img src="docs/assets/screenshots/05-prediction-result.png" alt="Decision-support result showing model prediction, probabilities, safety escalation, and final routing" width="100%">
+      <br><sub>Model output and transparent safety-rule escalation remain distinct and reviewable.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Clinician sign-off</strong><br>
+      <img src="docs/assets/screenshots/06-clinician-review.png" alt="Clinician review interface with accept, override, and further-review actions" width="100%">
+      <br><sub>The clinician retains control through explicit accept, override, and further-review actions.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <strong>PDF decision-support summary</strong><br>
+      <img src="docs/assets/screenshots/10-pdf-summary.png" alt="Generated PDF decision-support summary with intake, model output, safety result, and clinician review" width="100%">
+      <br><sub>The backend-generated report preserves the decision trail and safety disclaimer.</sub>
+    </td>
+  </tr>
+</table>
 
-- Command Center
-- New Intake
-- Clinical NLP review and evidence
-- Prediction and safety escalation
-- Clinician review
-- Assessment Detail
-- Audit Trail
-- Reports and PDF
-- Model Monitoring
-- System Architecture
+**Model monitoring**
+
+<img src="docs/assets/screenshots/11-model-monitoring.png" alt="Model Monitoring page showing verified LightGBM model identity, metrics, threshold, and runtime status" width="100%">
+
+The monitoring view exposes the loaded model identity, verified evaluation metrics, threshold, and runtime status.
+
+**System architecture**
+
+<img src="docs/assets/screenshots/13-system-architecture.png" alt="TriageAI system architecture showing review-gated intake, NLP extraction, model inference, safety escalation, clinician review, persistence, audit, and reporting" width="100%">
+
+The full architecture shows the deliberate review gates from intake through clinician sign-off, audit history, and PDF reporting.
+
+[View the complete screenshot gallery](docs/assets/screenshots/)
 
 ---
 

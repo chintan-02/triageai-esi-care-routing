@@ -8,7 +8,10 @@ TriageAI / SympDirect is a completed local demonstration of an end-to-end health
 
 The project is designed as decision-support only. It does not diagnose patients, recommend treatment, make autonomous clinical decisions, or replace clinicians. Its completed demo-freeze state demonstrates the software and machine-learning engineering needed to move from a model artifact to a reviewable workflow; it does not establish production clinical readiness.
 
-<!-- Screenshot: Command Center -->
+<figure>
+  <img src="../assets/screenshots/01-command-center.png" alt="TriageAI Command Center showing operational totals, assessment status, and recent activity" width="100%">
+  <figcaption>The Command Center proves that assessment workload, workflow status, and recent activity are visible from a single operational view.</figcaption>
+</figure>
 
 ## The Problem
 
@@ -52,12 +55,35 @@ TriageAI therefore treats the model as one component inside a human-in-the-loop 
 11. **Preserve traceability.** The backend stores the assessment, prediction metadata, reviewed NLP evidence, clinician action, override reason where applicable, and report events in the audit trail.
 12. **Generate documentation.** The backend creates a PDF decision-support summary containing the intake, model and safety output, clinician review, reviewed NLP evidence, and safety disclaimer.
 
-<!-- Screenshot: New Intake -->
-<!-- Screenshot: Clinical NLP review and evidence -->
-<!-- Screenshot: Prediction and safety escalation -->
-<!-- Screenshot: Clinician review -->
-<!-- Screenshot: Audit Trail -->
-<!-- Screenshot: Reports and PDF -->
+<figure>
+  <img src="../assets/screenshots/02-new-intake-note.png" alt="New Intake workflow with an editable clinical note and explicit extraction controls" width="100%">
+  <figcaption>The intake screen proves that clinical notes remain editable and that NLP extraction requires an explicit action.</figcaption>
+</figure>
+
+<figure>
+  <img src="../assets/screenshots/03-nlp-review-evidence.png" alt="Clinical NLP review showing extracted fields, source evidence, safety cues, and missing information" width="100%">
+  <figcaption>The NLP review proves that extracted values are linked to source evidence and missing information remains visible before prediction.</figcaption>
+</figure>
+
+<figure>
+  <img src="../assets/screenshots/05-prediction-result.png" alt="Decision-support result showing model prediction, probabilities, safety escalation, and final routing" width="100%">
+  <figcaption>The result view proves that model output, probabilities, safety-rule escalation, and final routing are presented as distinct decision-support signals.</figcaption>
+</figure>
+
+<figure>
+  <img src="../assets/screenshots/06-clinician-review.png" alt="Clinician review interface with accept, override, and further-review actions" width="100%">
+  <figcaption>The clinician-review screen proves that sign-off remains a human action with accept, override, and further-review options.</figcaption>
+</figure>
+
+<figure>
+  <img src="../assets/screenshots/08-audit-trail.png" alt="Audit Trail showing timestamped prediction, review, evidence, and report events" width="100%">
+  <figcaption>The audit trail proves that consequential workflow events remain timestamped and traceable.</figcaption>
+</figure>
+
+<figure>
+  <img src="../assets/screenshots/10-pdf-summary.png" alt="Generated PDF decision-support summary with intake, model output, safety result, and clinician review" width="100%">
+  <figcaption>The generated PDF proves that intake, model and safety output, clinician review, evidence, and disclaimers carry into the final summary.</figcaption>
+</figure>
 
 ## System Architecture
 
@@ -80,6 +106,11 @@ flowchart TD
 ```
 
 The architecture uses deliberate review gates. Recording does not trigger transcription, transcription does not trigger NLP extraction, extraction does not trigger prediction, and a decision-support result does not replace clinician review.
+
+<figure>
+  <img src="../assets/screenshots/13-system-architecture.png" alt="TriageAI system architecture showing review-gated intake, NLP extraction, model inference, safety escalation, clinician review, persistence, audit, and reporting" width="100%">
+  <figcaption>The architecture diagram proves that explicit review gates separate intake, extraction, prediction, safety escalation, clinician sign-off, persistence, audit, and reporting.</figcaption>
+</figure>
 
 ## Machine-Learning Model and Verified Metrics
 
@@ -107,7 +138,10 @@ Verified final evaluation metrics:
 
 These metrics describe the selected model artifact and do not constitute prospective clinical validation. The classifier is limited to ESI 3, ESI 4, and ESI 5; configured higher-acuity concerns are handled through transparent safety-rule escalation and clinician review rather than invented model classes.
 
-<!-- Screenshot: Model Monitoring -->
+<figure>
+  <img src="../assets/screenshots/11-model-monitoring.png" alt="Model Monitoring page showing verified LightGBM model identity, metrics, threshold, and runtime status" width="100%">
+  <figcaption>The monitoring view proves that the loaded model identity, verified metrics, class scope, feature count, and decision threshold are visible to reviewers.</figcaption>
+</figure>
 
 ## Clinical NLP Safety Layer
 
@@ -141,7 +175,10 @@ The **React frontend** uses Vite, TypeScript, Tailwind CSS, React Router, Rechar
 
 The backend and database remain the source of truth. Browser storage and mock fixtures do not own real assessments, and official PDF summaries are generated server-side. SQLite supports the local demonstration; PostgreSQL is the recommended database for a controlled professional deployment.
 
-<!-- Screenshot: Assessment Detail -->
+<figure>
+  <img src="../assets/screenshots/07-assessment-detail.png" alt="Assessment Detail page showing persisted intake, prediction, safety result, and review status" width="100%">
+  <figcaption>The assessment detail view proves that persisted intake, prediction metadata, safety output, and clinician-review status share one backend-owned record.</figcaption>
+</figure>
 
 ## Key Engineering Decisions
 
@@ -172,8 +209,8 @@ The final validation covered backend contracts and persistence, model loading, f
 
 | Validation | Final result |
 |---|---|
-| Backend tests | **90 passed** |
-| Frontend tests | **12 test files, 38 tests** |
+| Backend tests | **96 passed** |
+| Frontend tests | **14 test files, 52 tests** |
 | React production build | **Passed** |
 | Docker full-stack run | **Passed** |
 | Backend readiness | **Passed** |
