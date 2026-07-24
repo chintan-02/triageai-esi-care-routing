@@ -3,6 +3,7 @@ import { AlertTriangle, Cpu, FileCheck2, Gauge, ShieldCheck, Timer, Workflow } f
 import { getDashboardSummary } from '@/api/dashboard';
 import { useModelStatus } from '@/context/ModelStatusContext';
 import type { DashboardSummaryResponse, RecentAssessmentItem } from '@/types/api';
+import type { ModelMetricSnapshot } from '@/types/clinical';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
@@ -52,6 +53,17 @@ export function ModelMonitoringPage() {
   const isLoading = isModelLoading || isSummaryLoading;
   const error = modelError ?? readinessError ?? summaryError;
   const backendReady = Boolean(readiness && readiness.database_connected && readiness.model_loaded && !readiness.is_placeholder);
+  const modelMetrics = useMemo<ModelMetricSnapshot | undefined>(() => {
+    const metrics = readiness?.model_metrics;
+    if (!metrics) return undefined;
+    return {
+      accuracy: metrics.accuracy,
+      macroF1: metrics.macro_f1,
+      weightedF1: metrics.weighted_f1,
+      esi5F1: metrics.esi5_f1,
+      unsafeDowngradeRate: metrics.unsafe_esi3_to_esi5_downgrade_rate
+    };
+  }, [readiness?.model_metrics]);
 
   return (
     <div>
@@ -78,7 +90,7 @@ export function ModelMonitoringPage() {
           <StatCard label="Backend" value={backendReady ? 'Ready' : 'Unavailable'} hint={readiness?.database ?? 'FastAPI readiness'} icon={<Gauge size={22} />} tone="model" />
           <StatCard label="Model Loaded" value={readiness?.model_loaded ? 'Yes' : 'No'} hint={readiness?.model_source ?? 'Model registry source'} icon={<Workflow size={22} />} tone="blue" />
           <StatCard label="Placeholders" value={readiness?.is_placeholder ? 'Yes' : 'No'} hint="Backend /ready placeholder flag" icon={<ShieldCheck size={22} />} tone="red" />
-          <StatCard label="Avg Latency" value={avgLatency === null ? '—' : `${avgLatency} ms`} hint="Observed assessment response time" icon={<Timer size={22} />} tone="amber" />
+          <StatCard label="Average prediction latency" value={avgLatency === null ? '—' : `${avgLatency} ms`} hint="Observed backend response time in milliseconds" icon={<Timer size={22} />} tone="amber" />
         </div>
       )}
 
@@ -98,6 +110,7 @@ export function ModelMonitoringPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Feature count</p><p className="font-data mt-1 text-xl font-black text-slate-950">{readiness?.feature_count ?? '—'}</p></div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Threshold config</p><p className="font-data mt-1 text-xl font-black text-slate-950">{readiness?.threshold_config_loaded ? 'Loaded' : '—'}</p></div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Decision threshold</p><p className="font-data mt-1 text-xl font-black text-slate-950">{typeof readiness?.decision_threshold === 'number' ? readiness.decision_threshold.toFixed(2) : '—'}</p></div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Class order</p><p className="font-data mt-1 text-sm font-black text-slate-950">{readiness?.class_order?.join(', ') ?? '—'}</p></div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Calibration</p><p className="font-data mt-1 text-sm font-black text-slate-950">{readiness?.selected_calibration_method ?? '—'}</p></div>
             </div>
@@ -111,7 +124,7 @@ export function ModelMonitoringPage() {
         <Card>
           <CardHeader title="Backend model readiness" description="Live readiness fields from the backend source of truth." />
           <CardBody className="space-y-5">
-            <MetricsBarChart />
+            <MetricsBarChart metrics={modelMetrics} />
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="flex items-center gap-2 text-sm font-bold text-slate-950"><FileCheck2 size={17} /> Artifact check</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -124,7 +137,7 @@ export function ModelMonitoringPage() {
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_0.8fr]">
         <Card>
-          <CardHeader title="Latency & confidence trend" description="Most recent assessments, in submission order." />
+          <CardHeader title="Prediction latency (ms) and confidence (%)" description="Most recent assessments in submission order; timestamps include seconds to distinguish closely spaced runs." />
           <CardBody>
             <OperationalTrendChart
               points={recent.map((record) => ({

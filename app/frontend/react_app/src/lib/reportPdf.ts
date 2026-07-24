@@ -71,7 +71,7 @@ function drawWrappedText(doc: jsPDFType, text: string, x: number, y: number, max
   return y + Math.max(1, lines.length) * lineHeight;
 }
 
-function cleanList(values: string[], fallback = 'None selected') {
+function cleanList(values: string[], fallback = 'Not documented') {
   const cleaned = values.filter((value) => value !== 'None reported');
   if (cleaned.length) return cleaned.join(', ');
   if (values.includes('None reported')) return 'None reported';
@@ -82,8 +82,13 @@ function pendingReviewNote(note: string) {
   return note.trim().toLowerCase().startsWith('awaiting clinician review');
 }
 
-function entered(value: number | undefined) {
+function entered(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function formatVital(value: number | null, unit: string, decimals?: number) {
+  if (!entered(value)) return 'Not entered';
+  return `${decimals === undefined ? value : value.toFixed(decimals)}${unit}`;
 }
 
 function formatBp(vitals: AssessmentRecord['intake']['vitals']) {
@@ -98,23 +103,26 @@ function visibleSafetySignals(record: AssessmentRecord) {
   const hasAbnormalVitalsFlag = riskFlags.includes('abnormal vital signs');
 
   const vitalSignals: Array<{ key: VitalKey; label: string; value: number | string }> = [
-    { key: 'heartRate', label: 'HR', value: `${intake.vitals.heartRate} bpm` },
-    { key: 'respiratoryRate', label: 'RR', value: `${intake.vitals.respiratoryRate}/min` },
+    { key: 'heartRate', label: 'HR', value: formatVital(intake.vitals.heartRate, ' bpm') },
+    { key: 'respiratoryRate', label: 'RR', value: formatVital(intake.vitals.respiratoryRate, '/min') },
     { key: 'systolicBp', label: 'BP', value: formatBp(intake.vitals) },
-    { key: 'temperatureC', label: 'Temp', value: `${intake.vitals.temperatureC.toFixed(1)}°C` },
-    { key: 'spo2', label: 'SpO2', value: `${intake.vitals.spo2}%` },
-    { key: 'painScore', label: 'Pain', value: `${intake.vitals.painScore}/10` }
+    { key: 'temperatureC', label: 'Temp', value: formatVital(intake.vitals.temperatureC, '°C', 1) },
+    { key: 'spo2', label: 'SpO2', value: formatVital(intake.vitals.spo2, '%') },
+    { key: 'painScore', label: 'Pain', value: formatVital(intake.vitals.painScore, '/10') }
   ];
 
-  const abnormalVitals = vitalSignals.filter((signal) => vitalFlag(signal.key, Number(intake.vitals[signal.key]), intake.patient.age) !== 'normal');
-  const criticalVitals = vitalSignals.filter((signal) => vitalFlag(signal.key, Number(intake.vitals[signal.key]), intake.patient.age) === 'critical');
+  const abnormalVitals = vitalSignals.filter((signal) => {
+    const flag = vitalFlag(signal.key, intake.vitals[signal.key], intake.patient.age);
+    return flag === 'abnormal' || flag === 'critical';
+  });
+  const criticalVitals = vitalSignals.filter((signal) => vitalFlag(signal.key, intake.vitals[signal.key], intake.patient.age) === 'critical');
   const signals = criticalVitals.map((signal) => `Critical ${signal.label} (${signal.value})`);
 
   if (hasAbnormalVitalsFlag && abnormalVitals.length) signals.push('Abnormal vital signs risk flag');
   if (riskText.includes('altered mental status')) signals.push('Altered mental status');
   if ((riskText.includes('shortness of breath') || riskText.includes('breath')) && abnormalVitals.length) signals.push('Shortness of breath with abnormal vitals');
   if (riskText.includes('chest pain') && abnormalVitals.length) signals.push('Chest pain with abnormal vitals');
-  if ((riskText.includes('severe pain') || intake.vitals.painScore >= 8) && abnormalVitals.length) signals.push('Severe pain with abnormal vitals');
+  if ((riskText.includes('severe pain') || (entered(intake.vitals.painScore) && intake.vitals.painScore >= 8)) && abnormalVitals.length) signals.push('Severe pain with abnormal vitals');
   if (riskText.includes('recent trauma') && abnormalVitals.length) signals.push('Recent trauma with abnormal vitals');
 
   return Array.from(new Set(signals));
@@ -381,7 +389,7 @@ export async function generateAssessmentPdf(record: AssessmentRecord) {
       ['Chief Complaint', intake.chiefComplaint],
       ['Symptom Narrative', intake.symptomText],
       ['Duration', intake.duration],
-      ['Selected risk flags', cleanList(intake.riskFlags)],
+      ['Clinician-selected risk flags', cleanList(intake.riskFlags)],
       ['Comorbidities', cleanList(intake.comorbidities)]
     ],
     theme: 'striped',
@@ -397,12 +405,12 @@ export async function generateAssessmentPdf(record: AssessmentRecord) {
 
   type VitalCell = { key: keyof typeof intake.vitals; text: string };
   const vitalCells: VitalCell[] = [
-    { key: 'heartRate', text: `${intake.vitals.heartRate} bpm` },
-    { key: 'respiratoryRate', text: `${intake.vitals.respiratoryRate}/min` },
+    { key: 'heartRate', text: formatVital(intake.vitals.heartRate, ' bpm') },
+    { key: 'respiratoryRate', text: formatVital(intake.vitals.respiratoryRate, '/min') },
     { key: 'systolicBp', text: formatBp(intake.vitals) },
-    { key: 'temperatureC', text: `${intake.vitals.temperatureC.toFixed(1)}°C` },
-    { key: 'spo2', text: `${intake.vitals.spo2}%` },
-    { key: 'painScore', text: `${intake.vitals.painScore}/10` }
+    { key: 'temperatureC', text: formatVital(intake.vitals.temperatureC, '°C', 1) },
+    { key: 'spo2', text: formatVital(intake.vitals.spo2, '%') },
+    { key: 'painScore', text: formatVital(intake.vitals.painScore, '/10') }
   ];
   autoTable(doc, {
     startY: y + 10,

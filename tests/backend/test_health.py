@@ -24,6 +24,8 @@ def test_readiness_check_returns_stable_success_shape() -> None:
     assert "model_source" in body
     assert "selected_calibration_method" in body
     assert "threshold_config_loaded" in body
+    assert "decision_threshold" in body
+    assert "model_metrics" in body
     assert "feature_count" in body
     assert "class_order" in body
 
@@ -35,6 +37,14 @@ def test_readiness_check_returns_stable_success_shape() -> None:
         assert body["model_source"] == "final_registry"
         assert body["selected_calibration_method"] == "raw_lightgbm_probability"
         assert body["threshold_config_loaded"] is True
+        assert body["decision_threshold"] == 0.60
+        assert body["model_metrics"] == {
+            "accuracy": 0.7832381174458825,
+            "macro_f1": 0.7037018470872188,
+            "weighted_f1": 0.788775923531898,
+            "esi5_f1": 0.5469661610268378,
+            "unsafe_esi3_to_esi5_downgrade_rate": 0.006805735810832199,
+        }
         assert body["feature_count"] == 273
         assert body["class_order"] == ["ESI_3", "ESI_4", "ESI_5"]
         assert body["is_placeholder"] is False
@@ -69,3 +79,5 @@ def test_readiness_check_returns_503_when_model_unavailable(monkeypatch) -> None
     assert body["model_loaded"] is False
     assert body["model_source"] == "unavailable"
     assert body["model_error"] == "LightGBM package is not installed."
+    assert body["decision_threshold"] is None
+    assert body["model_metrics"] is None

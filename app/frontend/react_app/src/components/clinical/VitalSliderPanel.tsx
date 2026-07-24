@@ -1,5 +1,5 @@
 import { Minus, Plus } from 'lucide-react';
-import type { Vitals } from '@/types/clinical';
+import type { DraftVitals } from '@/types/clinical';
 import { ageBand, vitalFlag, vitalFlagTone, vitalRange, vitalStatusLabel, type VitalKey } from '@/lib/vitals';
 
 interface VitalControl {
@@ -54,9 +54,24 @@ function referenceText(control: VitalControl, age: number) {
   return 'Reference range unavailable';
 }
 
-export function VitalSliderPanel({ vitals, age, onChange }: { vitals: Vitals; age: number; onChange: (next: Vitals) => void }) {
-  const update = (key: VitalKey, nextValue: number) => {
-    onChange({ ...vitals, [key]: Number(nextValue.toFixed(key === 'temperatureC' ? 1 : 0)) });
+type VitalSource = 'extracted' | 'clinician-entered' | 'clinician-edited';
+
+export function VitalSliderPanel({
+  vitals,
+  age,
+  sources,
+  onChange
+}: {
+  vitals: DraftVitals;
+  age: number;
+  sources?: Partial<Record<VitalKey, VitalSource>>;
+  onChange: (next: DraftVitals, changedKey: VitalKey) => void;
+}) {
+  const update = (key: VitalKey, nextValue: number | null) => {
+    const normalized = nextValue === null
+      ? null
+      : Number(nextValue.toFixed(key === 'temperatureC' ? 1 : 0));
+    onChange({ ...vitals, [key]: normalized }, key);
   };
 
   return (
@@ -74,19 +89,29 @@ export function VitalSliderPanel({ vitals, age, onChange }: { vitals: Vitals; ag
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
         {controls.map((control) => {
           const value = vitals[control.key];
+          const hasValue = typeof value === 'number' && Number.isFinite(value);
           const flag = vitalFlag(control.key, value, age);
-          const display = formatStableValue(value, control);
+          const display = hasValue ? formatStableValue(value, control) : 'Not entered';
           const band = normalBand(control, age);
-          const thumbPosition = clampPercent(value, control.min, control.max);
+          const thumbPosition = hasValue ? clampPercent(value, control.min, control.max) : null;
+          const source = sources?.[control.key];
+          const sourceLabel = source === 'extracted'
+            ? 'Extracted from note'
+            : source === 'clinician-edited'
+              ? 'Clinician edited'
+              : source === 'clinician-entered'
+                ? 'Clinician entered'
+                : 'Not entered';
           return (
             <section key={control.key} className={`flex h-full flex-col rounded-[1.2rem] border bg-white p-2.5 shadow-sm ${vitalFlagTone(flag)}`}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">{control.label}</p>
                   <div className="mt-1.5 flex items-end gap-2">
-                    <span className="font-data text-2xl font-black text-slate-950">{display}</span>
-                    <span className="pb-1 text-sm font-bold text-slate-500">{control.unit}</span>
+                    <span className={`font-data font-black text-slate-950 ${hasValue ? 'text-2xl' : 'text-lg'}`}>{display}</span>
+                    {hasValue ? <span className="pb-1 text-sm font-bold text-slate-500">{control.unit}</span> : null}
                   </div>
+                  <p className="mt-1 text-[11px] font-bold text-slate-500">{sourceLabel}</p>
                 </div>
                 <span className="rounded-full border bg-white px-2.5 py-1 text-[11px] font-black uppercase tracking-wide">{vitalStatusLabel(flag)}</span>
               </div>
@@ -103,21 +128,25 @@ export function VitalSliderPanel({ vitals, age, onChange }: { vitals: Vitals; ag
                     style={{ left: `${band.left}%`, width: `${band.width}%` }}
                     aria-hidden="true"
                   />
-                  <div
-                    className="absolute top-1/2 h-4 w-1 -translate-y-1/2 rounded-full bg-clinical-blue shadow"
-                    style={{ left: `calc(${thumbPosition}% - 2px)` }}
-                    aria-hidden="true"
-                  />
+                  {thumbPosition === null ? null : (
+                    <div
+                      className="absolute top-1/2 h-4 w-1 -translate-y-1/2 rounded-full bg-clinical-blue shadow"
+                      style={{ left: `calc(${thumbPosition}% - 2px)` }}
+                      aria-hidden="true"
+                    />
+                  )}
                 </div>
                 <input
                   type="range"
                   min={control.min}
                   max={control.max}
                   step={control.step}
-                  value={value}
+                  value={hasValue ? value : control.min}
                   onChange={(event) => update(control.key, Number(event.target.value))}
-                  className="vital-range-input absolute inset-0 h-8 w-full cursor-pointer opacity-0"
+                  disabled={!hasValue}
+                  className="vital-range-input absolute inset-0 h-8 w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
                   aria-label={control.label}
+                  aria-describedby={!hasValue ? `${control.key}-missing-help` : undefined}
                 />
               </div>
 
@@ -129,7 +158,8 @@ export function VitalSliderPanel({ vitals, age, onChange }: { vitals: Vitals; ag
               <div className="mt-2.5 grid grid-cols-[36px_1fr_36px] items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => update(control.key, Math.max(control.min, value - control.step))}
+                  onClick={() => hasValue && update(control.key, Math.max(control.min, value - control.step))}
+                  disabled={!hasValue}
                   className="focus-ring flex h-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   aria-label={`Decrease ${control.label}`}
                 >
@@ -140,19 +170,27 @@ export function VitalSliderPanel({ vitals, age, onChange }: { vitals: Vitals; ag
                   min={control.min}
                   max={control.max}
                   step={control.step}
-                  value={value}
-                  onChange={(event) => update(control.key, Number(event.target.value))}
+                  value={hasValue ? value : ''}
+                  onChange={(event) => update(control.key, event.target.value === '' ? null : Number(event.target.value))}
+                  placeholder="Enter"
                   className="focus-ring w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-center font-data font-bold text-slate-950"
+                  aria-label={`Enter ${control.label}`}
                 />
                 <button
                   type="button"
-                  onClick={() => update(control.key, Math.min(control.max, value + control.step))}
+                  onClick={() => hasValue && update(control.key, Math.min(control.max, value + control.step))}
+                  disabled={!hasValue}
                   className="focus-ring flex h-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   aria-label={`Increase ${control.label}`}
                 >
                   <Plus size={16} />
                 </button>
               </div>
+              {!hasValue ? (
+                <p id={`${control.key}-missing-help`} className="mt-2 text-xs font-semibold text-slate-600">
+                  Enter a value to enable slider controls.
+                </p>
+              ) : null}
             </section>
           );
         })}

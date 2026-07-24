@@ -10,6 +10,35 @@ from app.backend.services.model_loader import get_model_bundle
 router = APIRouter(tags=["health"])
 
 
+def _decision_threshold(bundle: Any) -> float | None:
+    threshold_config = bundle.threshold_config or bundle.thresholds or {}
+    for key in ("deployment_threshold", "esi5_threshold", "best_lgb_v2_threshold"):
+        value = threshold_config.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    return None
+
+
+def _model_metrics(bundle: Any) -> dict[str, float] | None:
+    metrics = bundle.metrics
+    if not isinstance(metrics, dict):
+        return None
+
+    field_map = {
+        "accuracy": "accuracy",
+        "macro_f1": "macro_f1",
+        "weighted_f1": "weighted_f1",
+        "esi5_f1": "esi5_f1",
+        "unsafe_esi3_to_esi5_downgrade_rate": "esi3_to_esi5_rate",
+    }
+    snapshot = {
+        response_key: float(metrics[source_key])
+        for response_key, source_key in field_map.items()
+        if isinstance(metrics.get(source_key), (int, float))
+    }
+    return snapshot or None
+
+
 @router.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok", "service": "TriageAI API"}
@@ -39,6 +68,8 @@ def readiness_check(response: Response) -> dict[str, Any]:
         "model_source": bundle.model_source,
         "selected_calibration_method": bundle.selected_calibration_method,
         "threshold_config_loaded": bundle.threshold_config is not None,
+        "decision_threshold": _decision_threshold(bundle),
+        "model_metrics": _model_metrics(bundle),
         "feature_count": (
             len(bundle.feature_list)
             if bundle.feature_list is not None

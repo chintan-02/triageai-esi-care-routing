@@ -41,3 +41,16 @@ def _ensure_sqlite_compat_columns(engine: object) -> None:
             }
             if "latency_ms" not in existing_prediction_columns:
                 connection.execute(text("ALTER TABLE predictions ADD COLUMN latency_ms INTEGER"))
+
+        if "assessments" in table_names:
+            existing_assessment_columns = {
+                column["name"] for column in inspector.get_columns("assessments")
+            }
+            if "risk_flags_json" not in existing_assessment_columns:
+                connection.execute(
+                    text("ALTER TABLE assessments ADD COLUMN risk_flags_json TEXT")
+                )
+            if "comorbidities_json" not in existing_assessment_columns:
+                connection.execute(
+                    text("ALTER TABLE assessments ADD COLUMN comorbidities_json TEXT")
+                )

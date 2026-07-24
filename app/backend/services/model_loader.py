@@ -22,6 +22,7 @@ class ModelBundle:
     feature_schema: dict[str, Any] | None = None
     feature_list: list[str] | None = None
     metadata: dict[str, Any] | None = None
+    metrics: dict[str, Any] | None = None
     label_mapping: dict[str, Any] | None = None
     loaded: bool = False
     is_placeholder: bool = True
@@ -39,6 +40,17 @@ _MODEL_BUNDLE_CACHE: ModelBundle | None = None
 def load_json_file(path: str | Path) -> dict[str, Any]:
     with Path(path).open(encoding="utf-8") as file:
         return json.load(file)
+
+
+def _load_optional_registry_metrics(registry_dir: Path) -> dict[str, Any] | None:
+    metrics_path = registry_dir / "reports" / "lightgbm_v2_test_metrics.json"
+    if not metrics_path.exists():
+        return None
+    try:
+        metrics = load_json_file(metrics_path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return metrics if isinstance(metrics, dict) else None
 
 
 def _normalize_label(label: Any) -> str:
@@ -217,6 +229,7 @@ def load_model_bundle(app_settings: Any = settings) -> ModelBundle:
 
     try:
         metadata = load_json_file(deployment_config_path)
+        metrics = _load_optional_registry_metrics(registry_dir)
         required_paths = {
             "model": _registry_relative_path(
                 registry_dir,
@@ -266,6 +279,7 @@ def load_model_bundle(app_settings: Any = settings) -> ModelBundle:
                 + ", ".join(str(path) for path in forbidden_paths)
             ),
             metadata=metadata,
+            metrics=metrics,
             model_version=metadata.get("model_version"),
             model_source="unavailable",
         )
@@ -306,6 +320,7 @@ def load_model_bundle(app_settings: Any = settings) -> ModelBundle:
                 feature_schema=feature_schema,
                 feature_list=_feature_list_from_schema(feature_schema),
                 metadata=metadata,
+                metrics=metrics,
                 label_mapping=label_mapping,
                 loaded=False,
                 error_message=(
@@ -337,6 +352,7 @@ def load_model_bundle(app_settings: Any = settings) -> ModelBundle:
                 feature_schema=feature_schema,
                 feature_list=feature_list,
                 metadata=metadata,
+                metrics=metrics,
                 label_mapping=label_mapping,
                 loaded=False,
                 error_message=(
@@ -366,6 +382,7 @@ def load_model_bundle(app_settings: Any = settings) -> ModelBundle:
             feature_schema=feature_schema,
             feature_list=feature_list,
             metadata=metadata,
+            metrics=metrics,
             label_mapping=label_mapping,
             loaded=True,
             is_placeholder=False,
@@ -381,6 +398,7 @@ def load_model_bundle(app_settings: Any = settings) -> ModelBundle:
             loaded=False,
             error_message=f"Unable to load model artifacts: {exc}",
             metadata=metadata,
+            metrics=metrics,
             model_version=metadata.get("model_version") if isinstance(metadata, dict) else None,
             model_name=metadata.get("model_display_name") if isinstance(metadata, dict) else None,
             selected_calibration_method=(

@@ -27,6 +27,12 @@ function numberOrFallback(value: unknown, fallback: number) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function numberOrNull(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function normalizeCreatePayload(payload: IntakePayload): IntakePayload {
   const mrn = uniqueMrn(payload.patient.mrn);
   return {
@@ -42,13 +48,13 @@ function normalizeCreatePayload(payload: IntakePayload): IntakePayload {
     symptomText: payload.symptomText.trim(),
     duration: payload.duration.trim(),
     vitals: {
-      heartRate: numberOrFallback(payload.vitals.heartRate, 86),
-      respiratoryRate: numberOrFallback(payload.vitals.respiratoryRate, 16),
-      systolicBp: numberOrFallback(payload.vitals.systolicBp, 122),
-      diastolicBp: numberOrFallback(payload.vitals.diastolicBp, 78),
-      temperatureC: numberOrFallback(payload.vitals.temperatureC, 36.9),
-      spo2: numberOrFallback(payload.vitals.spo2, 98),
-      painScore: numberOrFallback(payload.vitals.painScore, 3)
+      heartRate: numberOrNull(payload.vitals.heartRate),
+      respiratoryRate: numberOrNull(payload.vitals.respiratoryRate),
+      systolicBp: numberOrNull(payload.vitals.systolicBp),
+      diastolicBp: numberOrNull(payload.vitals.diastolicBp),
+      temperatureC: numberOrNull(payload.vitals.temperatureC),
+      spo2: numberOrNull(payload.vitals.spo2),
+      painScore: numberOrNull(payload.vitals.painScore)
     },
     riskFlags: [...payload.riskFlags],
     comorbidities: payload.comorbidities.filter((item) => item !== 'None reported' || payload.comorbidities.length === 1)

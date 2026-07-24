@@ -4,14 +4,15 @@ import { AlertTriangle, CheckCircle2, ChevronDown, ClipboardCheck, FileText, Loa
 import { createPrediction } from '@/api/predictions';
 import { useToast } from '@/context/ToastContext';
 import { comorbidityOptions, riskFlagOptions } from '@/data/mockData';
-import type { PatientProfile, Vitals } from '@/types/clinical';
+import type { DraftVitals, PatientProfile } from '@/types/clinical';
 import type { NlpExtractionAuditPayload, PatientIntakePayload } from '@/types/api';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { VitalsGrid } from '@/components/clinical/VitalsGrid';
 import { VitalSliderPanel } from '@/components/clinical/VitalSliderPanel';
-import { vitalFlag } from '@/lib/vitals';
+import { watchVitalCount, type VitalKey } from '@/lib/vitals';
 import { getMissingIntakeFields } from '@/lib/intakeValidation';
+import { deriveWorkflowStatus, type NlpWorkflowState } from '@/lib/workflowStatus';
 import { extractClinicalIntake } from '@/api/clinicalNlp';
 import { transcribeRecording } from '@/api/speech';
 import { ClinicalNlpReviewPanel } from '@/components/clinical-nlp/ClinicalNlpReviewPanel';
@@ -30,20 +31,20 @@ function createDefaultPatient(): PatientProfile {
   };
 }
 
-const defaultVitals: Vitals = {
-  heartRate: 86,
-  respiratoryRate: 16,
-  systolicBp: 122,
-  diastolicBp: 78,
-  temperatureC: 36.9,
-  spo2: 98,
-  painScore: 3
+const defaultVitals: DraftVitals = {
+  heartRate: null,
+  respiratoryRate: null,
+  systolicBp: null,
+  diastolicBp: null,
+  temperatureC: null,
+  spo2: null,
+  painScore: null
 };
 
 const CLINICAL_NLP_DEMO_NOTE =
   '62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2. Patient looks pale and dizzy.';
 
-function createDefaultVitals(): Vitals {
+function createDefaultVitals(): DraftVitals {
   return { ...defaultVitals };
 }
 
@@ -57,6 +58,8 @@ const steps = [
 
 type StepId = (typeof steps)[number]['id'];
 type RecordingState = 'idle' | 'requesting' | 'recording' | 'stopping';
+type FieldSource = 'extracted' | 'clinician-entered' | 'clinician-edited';
+type ProvenanceField = 'age' | 'sex' | 'chiefComplaint' | 'symptomText' | 'duration' | VitalKey;
 
 const stepCardClass = 'flex flex-col rounded-[1.2rem] border border-slate-200 bg-white p-3 shadow-[0_10px_30px_-24px_rgba(15,23,42,0.35)]';
 const fieldClass = 'space-y-1.5 text-sm font-semibold text-slate-700';
@@ -68,6 +71,19 @@ function displayValue(value: string, fallback = 'Not entered') {
 function toNullableText(value: string) {
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function updatedSource(current?: FieldSource): FieldSource {
+  return current === 'extracted' || current === 'clinician-edited'
+    ? 'clinician-edited'
+    : 'clinician-entered';
+}
+
+function provenanceLabel(source?: FieldSource) {
+  if (source === 'extracted') return 'Extracted';
+  if (source === 'clinician-edited') return 'Clinician edited';
+  if (source === 'clinician-entered') return 'Clinician entered';
+  return 'Not entered';
 }
 
 function microphoneErrorMessage(error: unknown) {
@@ -101,7 +117,9 @@ function buildPredictionPayload(
   chiefComplaint: string,
   symptomText: string,
   duration: string,
-  vitals: Vitals,
+  vitals: DraftVitals,
+  riskFlags: string[],
+  comorbidities: string[],
   nlpExtractionAudit?: NlpExtractionAuditPayload
 ): PatientIntakePayload {
   return {
@@ -120,6 +138,8 @@ function buildPredictionPayload(
     oxygen_saturation: vitals.spo2,
     arrival_mode: patient.arrivalMode,
     additional_context: toNullableText(symptomText),
+    risk_flags: riskFlags,
+    comorbidities,
     ...(nlpExtractionAudit ? { nlp_extraction_audit: nlpExtractionAudit } : {})
   };
 }
@@ -163,10 +183,14 @@ export function NewAssessmentPage() {
   const [transcriptionResult, setTranscriptionResult] = useState<SpeechTranscriptionResponse | null>(null);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const [nlpExtraction, setNlpExtraction] = useState<ClinicalIntakeExtractionResponse | null>(null);
+  const [extractedNote, setExtractedNote] = useState('');
+  const [extractionRevision, setExtractionRevision] = useState(0);
+  const [isOriginalNoteOpen, setIsOriginalNoteOpen] = useState(true);
   const [isExtractingNlp, setIsExtractingNlp] = useState(false);
   const [nlpError, setNlpError] = useState<string | null>(null);
   const [isNlpReviewed, setIsNlpReviewed] = useState(false);
-  const [vitals, setVitals] = useState<Vitals>(() => createDefaultVitals());
+  const [vitals, setVitals] = useState<DraftVitals>(() => createDefaultVitals());
+  const [fieldSources, setFieldSources] = useState<Partial<Record<ProvenanceField, FieldSource>>>({});
   const [riskFlags, setRiskFlags] = useState<string[]>([]);
   const [comorbidities, setComorbidities] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -208,34 +232,88 @@ export function NewAssessmentPage() {
     [patient, chiefComplaint, symptomText, duration]
   );
 
-  const needsNlpReview = Boolean(nlpExtraction && !isNlpReviewed);
+  const isExtractionStale = Boolean(
+    nlpExtraction && clinicalNote.trim() !== extractedNote
+  );
+  const needsNlpReview = Boolean(nlpExtraction && (!isNlpReviewed || isExtractionStale));
+  const nlpReviewError = isExtractionStale
+    ? 'NLP extraction stale'
+    : needsNlpReview
+      ? 'NLP review confirmation required'
+      : '';
   const stepErrors = useMemo<Record<StepId, string[]>>(
     () => ({
       patient: patient.name.trim() ? [] : ['Patient name is required'],
       complaint: [
         !chiefComplaint.trim() ? 'Chief complaint is required' : '',
         !symptomText.trim() ? 'Symptom narrative is required' : '',
-        !duration.trim() ? 'Duration is required' : ''
+        !duration.trim() ? 'Duration is required' : '',
+        nlpReviewError
       ].filter(Boolean),
       vitals: [],
       risks: [],
       review: [
       ...missingFields,
-      ...(needsNlpReview ? ['Review NLP extracted fields before prediction'] : [])
+      ...(nlpReviewError ? [nlpReviewError] : [])
     ]
     }),
-    [chiefComplaint, duration, missingFields, needsNlpReview, patient.name, symptomText]
+    [chiefComplaint, duration, missingFields, nlpReviewError, patient.name, symptomText]
   );
 
   const abnormalVitalCount = useMemo(
-    () =>
-      (Object.keys(vitals) as Array<keyof Vitals>).filter((key) => vitalFlag(key, vitals[key], patient.age) !== 'normal').length,
+    () => watchVitalCount(vitals, patient.age),
     [patient.age, vitals]
+  );
+  const missingVitalCount = Object.values(vitals).filter((value) => value === null).length;
+  const actionableWarnings = useMemo(() => [
+    ...missingFields.map((field) => `${field} required`),
+    ...(vitals.respiratoryRate === null ? ['Respiratory rate missing'] : []),
+    ...(nlpReviewError ? [nlpReviewError] : [])
+  ], [missingFields, nlpReviewError, vitals.respiratoryRate]);
+  const informationalMissing = vitals.painScore === null
+    ? ['Pain score not entered']
+    : [];
+  const nlpWorkflowState: NlpWorkflowState = isExtractionStale
+    ? 'stale'
+    : nlpExtraction && !isNlpReviewed
+      ? 'review-required'
+      : nlpExtraction
+        ? 'reviewed'
+        : 'not-used';
+  const hasUndocumentedInformation = missingVitalCount > 0;
+  const workflowStatus = useMemo(
+    () => deriveWorkflowStatus({
+      requiredIntakeComplete: missingFields.length === 0,
+      nlpState: nlpWorkflowState,
+      hasUndocumentedInformation
+    }),
+    [hasUndocumentedInformation, missingFields.length, nlpWorkflowState]
   );
 
   const activeStep = steps[currentStep];
   const canGoNext = stepErrors[activeStep.id].length === 0;
+  const activeStepReason = stepErrors[activeStep.id][0] ?? 'Step complete';
   const progress = ((currentStep + 1) / steps.length) * 100;
+
+  const setManualSource = (field: ProvenanceField) => {
+    setFieldSources((current) => ({
+      ...current,
+      [field]: updatedSource(current[field])
+    }));
+  };
+
+  const handleVitalsChange = (next: DraftVitals, changedKey: VitalKey) => {
+    setVitals(next);
+    setFieldSources((current) => {
+      const updated = { ...current };
+      if (next[changedKey] === null) {
+        delete updated[changedKey];
+      } else {
+        updated[changedKey] = updatedSource(current[changedKey]);
+      }
+      return updated;
+    });
+  };
 
   const toggle = (value: string, list: string[], setter: (next: string[]) => void) => {
     setter(list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
@@ -262,18 +340,28 @@ export function NewAssessmentPage() {
     event.preventDefault();
   };
 
-  const handleUseDemoNote = () => {
-    setClinicalNote(CLINICAL_NLP_DEMO_NOTE);
-    setNlpExtraction(null);
-    setIsNlpReviewed(false);
+  const replaceClinicalNote = (note: string) => {
+    setClinicalNote(note);
+    setIsOriginalNoteOpen(true);
+    if (nlpExtraction && note.trim() !== extractedNote) {
+      setIsNlpReviewed(false);
+    }
     setNlpError(null);
   };
 
+  const handleUseDemoNote = () => {
+    replaceClinicalNote(CLINICAL_NLP_DEMO_NOTE);
+  };
+
   const handleUseTranscript = () => {
-    setClinicalNote(transcriptText);
-    setNlpExtraction(null);
-    setIsNlpReviewed(false);
-    setNlpError(null);
+    replaceClinicalNote(transcriptText);
+  };
+
+  const handleClinicalNoteChange = (note: string) => {
+    setClinicalNote(note);
+    if (nlpExtraction && note.trim() !== extractedNote) {
+      setIsNlpReviewed(false);
+    }
   };
 
   const handleStartRecording = async () => {
@@ -428,6 +516,9 @@ export function NewAssessmentPage() {
   try {
     const extraction = await extractClinicalIntake(note);
     setNlpExtraction(extraction);
+    setExtractedNote(note);
+    setExtractionRevision((revision) => revision + 1);
+    setIsOriginalNoteOpen(false);
 
     setPatient((current) => ({
       ...current,
@@ -447,13 +538,34 @@ export function NewAssessmentPage() {
 
     setVitals((current) => ({
       ...current,
-      heartRate: extraction.vitals.hr ?? current.heartRate,
-      respiratoryRate: extraction.vitals.rr ?? current.respiratoryRate,
-      systolicBp: extraction.vitals.sbp ?? current.systolicBp,
-      diastolicBp: extraction.vitals.dbp ?? current.diastolicBp,
-      temperatureC: extraction.vitals.temp ?? current.temperatureC,
-      spo2: extraction.vitals.o2 ?? current.spo2
+      heartRate: extraction.vitals.hr ?? (fieldSources.heartRate === 'extracted' ? null : current.heartRate),
+      respiratoryRate: extraction.vitals.rr ?? (fieldSources.respiratoryRate === 'extracted' ? null : current.respiratoryRate),
+      systolicBp: extraction.vitals.sbp ?? (fieldSources.systolicBp === 'extracted' ? null : current.systolicBp),
+      diastolicBp: extraction.vitals.dbp ?? (fieldSources.diastolicBp === 'extracted' ? null : current.diastolicBp),
+      temperatureC: extraction.vitals.temp ?? (fieldSources.temperatureC === 'extracted' ? null : current.temperatureC),
+      spo2: extraction.vitals.o2 ?? (fieldSources.spo2 === 'extracted' ? null : current.spo2)
     }));
+
+    setFieldSources((current) => {
+      const updated = { ...current };
+      if (extraction.age !== null) updated.age = 'extracted';
+      if (extraction.gender) updated.sex = 'extracted';
+      if (extraction.chief_complaint) updated.chiefComplaint = 'extracted';
+      if (extraction.symptoms.length) updated.symptomText = 'extracted';
+      if (extraction.vitals.hr !== null) updated.heartRate = 'extracted';
+      else if (updated.heartRate === 'extracted') delete updated.heartRate;
+      if (extraction.vitals.rr !== null) updated.respiratoryRate = 'extracted';
+      else if (updated.respiratoryRate === 'extracted') delete updated.respiratoryRate;
+      if (extraction.vitals.sbp !== null) updated.systolicBp = 'extracted';
+      else if (updated.systolicBp === 'extracted') delete updated.systolicBp;
+      if (extraction.vitals.dbp !== null) updated.diastolicBp = 'extracted';
+      else if (updated.diastolicBp === 'extracted') delete updated.diastolicBp;
+      if (extraction.vitals.temp !== null) updated.temperatureC = 'extracted';
+      else if (updated.temperatureC === 'extracted') delete updated.temperatureC;
+      if (extraction.vitals.o2 !== null) updated.spo2 = 'extracted';
+      else if (updated.spo2 === 'extracted') delete updated.spo2;
+      return updated;
+    });
 
     showToast({
       tone: 'success',
@@ -475,7 +587,7 @@ export function NewAssessmentPage() {
   
 
   const handleRunDecisionSupport = async () => {
-    if (missingFields.length || needsNlpReview || isSubmitting) return;
+    if (!workflowStatus.predictionEnabled || isSubmitting) return;
     setIsSubmitting(true);
     setSubmitError(null);
     try {
@@ -489,6 +601,8 @@ export function NewAssessmentPage() {
         symptomText,
         duration,
         vitals,
+        riskFlags,
+        comorbidities,
         nlpExtractionAudit
       );
       const prediction = await createPrediction(payload);
@@ -577,16 +691,24 @@ export function NewAssessmentPage() {
                   </label>
                   <label className={fieldClass}>
                     Age
-                    <input type="number" min={0} value={patient.age} onChange={(event) => setPatient({ ...patient, age: Number(event.target.value) })} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5" />
+                    <input type="number" min={0} value={patient.age} onChange={(event) => {
+                      setPatient({ ...patient, age: Number(event.target.value) });
+                      setManualSource('age');
+                    }} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5" />
+                    {fieldSources.age ? <span className="text-xs font-bold text-slate-500">{provenanceLabel(fieldSources.age)}</span> : null}
                   </label>
                   <label className={fieldClass}>
                     Sex
-                    <select value={patient.sex} onChange={(event) => setPatient({ ...patient, sex: event.target.value as PatientProfile['sex'] })} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5">
+                    <select value={patient.sex} onChange={(event) => {
+                      setPatient({ ...patient, sex: event.target.value as PatientProfile['sex'] });
+                      setManualSource('sex');
+                    }} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5">
                       <option>Unknown</option>
                       <option>Female</option>
                       <option>Male</option>
                       <option>Other</option>
                     </select>
+                    {fieldSources.sex ? <span className="text-xs font-bold text-slate-500">{provenanceLabel(fieldSources.sex)}</span> : null}
                   </label>
                   <label className={`${fieldClass} md:col-span-2 xl:col-span-1`}>
                     Arrival mode
@@ -624,15 +746,36 @@ export function NewAssessmentPage() {
     </Badge>
   </div>
 
-  <label className="flex flex-col gap-1.5 text-sm font-semibold text-slate-700">
-    Clinical note / transcript
-    <textarea
-      value={clinicalNote}
-      onChange={(event) => setClinicalNote(event.target.value)}
-      className="focus-ring min-h-[112px] resize-y rounded-2xl border border-blue-100 bg-white px-3.5 py-2.5"
-      placeholder="Example: 62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."
-    />
-  </label>
+  {nlpExtraction ? (
+    <button
+      type="button"
+      aria-controls="clinical-note-editor"
+      aria-expanded={isOriginalNoteOpen}
+      className="focus-ring flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-white px-3.5 py-2.5 text-left text-sm font-bold text-blue-950 hover:bg-blue-50"
+      onClick={() => setIsOriginalNoteOpen((open) => !open)}
+    >
+      <span>{isOriginalNoteOpen ? 'Hide original note' : 'View or edit original note'}</span>
+      <ChevronDown className={`transition-transform ${isOriginalNoteOpen ? 'rotate-180' : ''}`} size={17} />
+    </button>
+  ) : null}
+
+  {isOriginalNoteOpen || !nlpExtraction ? (
+    <label id="clinical-note-editor" className="mt-2 flex flex-col gap-1.5 text-sm font-semibold text-slate-700">
+      Clinical note / transcript
+      <textarea
+        value={clinicalNote}
+        onChange={(event) => handleClinicalNoteChange(event.target.value)}
+        className="focus-ring min-h-[112px] resize-y rounded-2xl border border-blue-100 bg-white px-3.5 py-2.5"
+        placeholder="Example: 62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."
+      />
+    </label>
+  ) : null}
+
+  {isExtractionStale ? (
+    <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900" role="status">
+      Original note changed. Run extraction again before relying on the previous result.
+    </div>
+  ) : null}
 
   <div className="mt-3 rounded-2xl border border-blue-100 bg-white/80 p-3">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -803,10 +946,7 @@ export function NewAssessmentPage() {
     </p>
   </div>
 
-  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-    <p className="text-xs font-semibold leading-5 text-blue-900">
-      Extracted values are copied into editable fields below. Clinician review is required before prediction.
-    </p>
+  <div className="mt-2 flex justify-end">
     <Button
       type="button"
       variant="secondary"
@@ -814,7 +954,7 @@ export function NewAssessmentPage() {
       onClick={handleExtractClinicalNote}
     >
       {isExtractingNlp ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
-      Extract Intake Fields
+      {nlpExtraction ? 'Re-extract Intake Fields' : 'Extract Intake Fields'}
     </Button>
   </div>
 
@@ -827,13 +967,12 @@ export function NewAssessmentPage() {
   {nlpExtraction ? (
     <div className="mt-3">
       <ClinicalNlpReviewPanel
+        key={extractionRevision}
         extraction={nlpExtraction}
         isReviewed={isNlpReviewed}
+        isStale={isExtractionStale}
         onReviewedChange={setIsNlpReviewed}
       />
-      <p className="mt-2 rounded-2xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold leading-5 text-blue-900">
-        Extracted values were copied into the editable structured fields below. Confirm or edit them before continuing.
-      </p>
     </div>
   ) : null}
 </div>
@@ -843,16 +982,26 @@ export function NewAssessmentPage() {
                       <p className="mt-0.5 text-xs font-semibold text-slate-500">These fields are used for decision support after clinician confirmation.</p>
                     </div>
                     {nlpExtraction ? (
-                      <Badge className="border-blue-200 bg-blue-50 text-blue-800">Updated from extraction</Badge>
+                      <div className="text-xs font-semibold text-slate-500" aria-label="Structured field provenance">
+                        Complaint: <span className="font-bold">{provenanceLabel(fieldSources.chiefComplaint)}</span>
+                        {' · '}
+                        Narrative: <span className="font-bold">{provenanceLabel(fieldSources.symptomText)}</span>
+                      </div>
                     ) : null}
                   </div>
                   <label className={fieldClass}>
                     Chief complaint
-                    <input value={chiefComplaint} onChange={(event) => setChiefComplaint(event.target.value)} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5" placeholder="Example: chest pain and shortness of breath" />
+                    <input value={chiefComplaint} onChange={(event) => {
+                      setChiefComplaint(event.target.value);
+                      setManualSource('chiefComplaint');
+                    }} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5" placeholder="Example: chest pain and shortness of breath" />
                   </label>
                   <label className="flex flex-col gap-1.5 text-sm font-semibold text-slate-700">
                     Symptom narrative
-                    <textarea value={symptomText} onChange={(event) => setSymptomText(event.target.value)} className="focus-ring min-h-[128px] resize-y rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5" placeholder="Brief but clinically useful description..." />
+                    <textarea value={symptomText} onChange={(event) => {
+                      setSymptomText(event.target.value);
+                      setManualSource('symptomText');
+                    }} className="focus-ring min-h-[128px] resize-y rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5" placeholder="Brief but clinically useful description..." />
                   </label>
                   <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px] md:items-end">
                     <p className="rounded-2xl border border-blue-100 bg-blue-50 px-3.5 py-2.5 text-sm font-semibold leading-6 text-blue-900">
@@ -860,7 +1009,10 @@ export function NewAssessmentPage() {
                     </p>
                     <label className={fieldClass}>
                       Duration
-                      <input value={duration} onChange={(event) => setDuration(event.target.value)} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5" placeholder="Example: 2 hours" />
+                      <input value={duration} onChange={(event) => {
+                        setDuration(event.target.value);
+                        setManualSource('duration');
+                      }} className="focus-ring w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5" placeholder="Example: 2 hours" />
                     </label>
                   </div>
                 </div>
@@ -873,7 +1025,12 @@ export function NewAssessmentPage() {
                   <h2 className="text-lg font-black text-slate-950">3. Vitals</h2>
                   <p className="mt-1 text-sm text-slate-600">Responsive vitals cards with fixed reference bands and independent current-value markers.</p>
                 </div>
-                <VitalSliderPanel vitals={vitals} age={patient.age} onChange={setVitals} />
+                <VitalSliderPanel
+                  vitals={vitals}
+                  age={patient.age}
+                  sources={fieldSources}
+                  onChange={handleVitalsChange}
+                />
               </div>
             ) : null}
 
@@ -914,26 +1071,34 @@ export function NewAssessmentPage() {
                   <h2 className="text-lg font-black text-slate-950">5. Review & Predict</h2>
                   <p className="mt-1 text-sm text-slate-600">Confirm the structured intake before running ESI decision support.</p>
                 </div>
-                {missingFields.length ? (
+                {!workflowStatus.predictionEnabled ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                     <div className="flex items-center gap-2 font-black">
                       <AlertTriangle size={18} />
-                      Step needs attention
+                      {workflowStatus.label}
                     </div>
-                    <p className="mt-1 text-amber-800">Complete the required fields before running ESI decision support.</p>
+                    <p className="mt-1 text-amber-800">Complete required fields and review confirmation before running ESI decision support.</p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {missingFields.map((field) => (
+                      {[...missingFields, ...(nlpReviewError ? [nlpReviewError] : [])].map((field) => (
                         <Badge key={field} className="border-amber-200 bg-white text-amber-800">
                           {field}
                         </Badge>
                       ))}
                     </div>
                   </div>
+                ) : workflowStatus.code === 'ready-with-undocumented-information' ? (
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                    <div className="flex items-center gap-2 font-black">
+                      <AlertTriangle size={18} />
+                      {workflowStatus.label}
+                    </div>
+                    <p className="mt-1 text-blue-800">Prediction is available; undocumented non-blocking values remain visible for clinician review.</p>
+                  </div>
                 ) : (
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
                     <div className="flex items-center gap-2 font-black">
                       <CheckCircle2 size={18} />
-                      Ready for prediction
+                      {workflowStatus.label}
                     </div>
                     <p className="mt-1 text-emerald-800">Required intake fields are complete for backend ESI decision support.</p>
                   </div>
@@ -968,8 +1133,14 @@ export function NewAssessmentPage() {
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-500">Safety gate preview</p>
-                    <p className="mt-2 font-bold text-slate-950">{missingFields.length ? 'Step needs attention' : 'Ready for prediction'}</p>
-                    <p className="mt-1 text-sm text-slate-600">{abnormalVitalCount} watch vitals. Safety rules and clinician review can escalate final routing before sign-off.</p>
+                    <p className="mt-2 font-bold text-slate-950">{workflowStatus.label}</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {abnormalVitalCount} watch vitals. {missingVitalCount === 0
+                        ? 'No vitals are missing.'
+                        : missingVitalCount === 1
+                          ? '1 vital remains undocumented.'
+                          : `${missingVitalCount} vitals remain undocumented.`} Safety rules and clinician review can escalate final routing before sign-off.
+                    </p>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-2.5 sm:p-3">
@@ -991,35 +1162,34 @@ export function NewAssessmentPage() {
                   </div>
                 ) : null}
 
-                {needsNlpReview ? (
-              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-                <div className="flex items-center gap-2 font-black">
-                  <ClipboardCheck size={18} />
-                  NLP extraction review required
-                </div>
-                <p className="mt-1 text-blue-800">
-                  Review the extracted fields in the complaint step before running ESI decision support.
-                </p>
-              </div>
-            ) : null}
               </div>
             ) : null}
           </div>
 
-          <div className="flex shrink-0 flex-col gap-2 border-t border-slate-100 px-3.5 py-3 sm:flex-row sm:justify-between sm:px-4">
-            <Button type="button" variant="secondary" disabled={currentStep === 0} onClick={() => setCurrentStep((step) => Math.max(step - 1, 0))}>
+          <div className="flex shrink-0 flex-col gap-3 border-t border-slate-100 bg-white px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+            <p className="text-xs font-semibold leading-5 text-slate-600" role="status">
+              <span className="font-black text-slate-800">Step {currentStep + 1} of {steps.length}</span>
+              {' · '}
+              {workflowStatus.label}
+            </p>
+            <div className="grid gap-2 sm:flex sm:items-center">
+            <Button className="w-full sm:w-auto" type="button" variant="secondary" disabled={currentStep === 0} onClick={() => setCurrentStep((step) => Math.max(step - 1, 0))}>
               Back
             </Button>
             {currentStep < steps.length - 1 ? (
-              <Button type="button" disabled={!canGoNext} onClick={goNext}>
-                Next
+              <Button className="w-full sm:w-auto" type="button" disabled={!canGoNext} aria-describedby={!canGoNext ? 'step-action-reason' : undefined} onClick={goNext}>
+                Continue to {steps[currentStep + 1].label}
               </Button>
             ) : (
-              <Button type="button" disabled={isSubmitting || missingFields.length > 0 || needsNlpReview} onClick={handleRunDecisionSupport}>
+              <Button className="w-full sm:w-auto" type="button" disabled={isSubmitting || !workflowStatus.predictionEnabled} aria-describedby={!workflowStatus.predictionEnabled ? 'step-action-reason' : undefined} onClick={handleRunDecisionSupport}>
                 {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : null}
                 Run ESI Decision Support
               </Button>
             )}
+            </div>
+            <span id="step-action-reason" className="sr-only">
+              {canGoNext ? workflowStatus.label : `${workflowStatus.label}. ${activeStepReason}`}
+            </span>
           </div>
         </section>
 
@@ -1048,23 +1218,30 @@ export function NewAssessmentPage() {
               <VitalsGrid vitals={vitals} age={patient.age} compact />
             </div>
             <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5">
+              <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-500">Safety and missing information</p>
+              {actionableWarnings.length ? (
+                <ul className="mt-2 space-y-1.5 text-sm font-semibold text-amber-900">
+                  {actionableWarnings.map((warning) => (
+                    <li key={warning} className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 shrink-0" size={15} />
+                      <span>{warning}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-emerald-800">
+                  <CheckCircle2 size={16} /> Required information complete
+                </p>
+              )}
+              {informationalMissing.map((item) => (
+                <p key={item} className="mt-2 text-xs font-semibold text-slate-600">{item}</p>
+              ))}
+            </div>
+            <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5">
               <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-500">Workflow status</p>
-              <p className="mt-2 text-sm font-semibold text-slate-800">
-                {needsNlpReview ? 'NLP review required' : missingFields.length ? 'Step needs attention' : 'Ready for prediction'}
-              </p>
+              <p className="mt-2 text-sm font-semibold text-slate-800">{workflowStatus.label}</p>
               <p className="mt-1 text-sm text-slate-600">Decision support only. Clinician review remains required.</p>
             </div>
-            {missingFields.length ? (
-              <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800">
-                <div className="flex gap-2 font-bold"><AlertTriangle size={18} /> Step needs attention</div>
-                <p className="mt-1">{missingFields.join(', ')}</p>
-              </div>
-            ) : (
-              <div className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-2.5 text-sm text-emerald-800">
-                <div className="flex gap-2 font-bold"><CheckCircle2 size={18} /> Ready for prediction</div>
-                <p className="mt-1">The backend will return model output, latency, safety gate, and audit metadata.</p>
-              </div>
-            )}
           </div>
         </aside>
       </form>

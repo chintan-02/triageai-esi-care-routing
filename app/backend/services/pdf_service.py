@@ -60,7 +60,7 @@ SAFETY_RULE_LABELS = {
 }
 
 VALUE_LABELS = {
-    "accept": "Accept",
+    "accept": "Accepted",
     "override": "Override",
     "needs_review": "Needs review",
     "model": "Model",
@@ -622,8 +622,15 @@ def _add_patient_snapshot(
     intake_rows.extend(
         [
             ("Duration", assessment.symptom_duration),
-            ("Selected risk flags", _risk_flags_text(prediction)),
-            ("Comorbidities", "None selected"),
+            (
+                "Clinician-selected risk flags",
+                _documented_selection_text(assessment.risk_flags_json),
+            ),
+            ("Safety escalation triggers", _safety_escalation_triggers_text(prediction)),
+            (
+                "Comorbidities",
+                _documented_selection_text(assessment.comorbidities_json),
+            ),
             ("Consciousness level", assessment.consciousness_level),
         ]
     )
@@ -1220,7 +1227,13 @@ def _add_audit_trail(
                 },
             )
         )
-    if clinician_review is not None and not audit_logs:
+    audit_actions = {audit_log.action for audit_log in audit_logs}
+    expected_review_action = (
+        f"clinician_review_{clinician_review.action}"
+        if clinician_review is not None
+        else None
+    )
+    if clinician_review is not None and expected_review_action not in audit_actions:
         events.append(
             (
                 clinician_review.created_at,
@@ -1246,19 +1259,15 @@ def _add_audit_trail(
                 details,
             )
         )
-
-    total_events = len(events)
-    if total_events > 4:
-        events = [
-            *events[:2],
-            (
-                generated_at,
-                "Audit trail condensed",
-                "System",
-                {"status": f"Showing first 2 and latest event of {total_events} events."},
-            ),
-            events[-1],
-        ]
+    events.append(
+        (
+            generated_at,
+            "PDF report generated",
+            "System",
+            {"status": "Generated"},
+        )
+    )
+    events.sort(key=_pdf_audit_sort_key)
 
     table_rows = [
         [
@@ -1271,7 +1280,7 @@ def _add_audit_trail(
     for timestamp, action, actor, details in events:
         table_rows.append(
             [
-                Paragraph(_safe(_display(timestamp)), styles["value"]),
+                Paragraph(_safe(_audit_timestamp(timestamp)), styles["value"]),
                 Paragraph(_safe(_display(action)), styles["value"]),
                 Paragraph(_safe(_audit_actor_text(actor)), styles["value"]),
                 Paragraph(_safe(_details_text(details)), styles["value"]),
@@ -1289,6 +1298,29 @@ def _add_audit_trail(
             long=True,
         )
     )
+
+
+def _pdf_audit_sort_key(event: tuple[Any, Any, Any, Any]) -> tuple[str, int, str]:
+    timestamp, action, _, _ = event
+    action_text = str(action).lower()
+    if action_text == "assessment created":
+        action_order = 0
+    elif "clinical nlp extraction reviewed" in action_text:
+        action_order = 1
+    elif action_text == "prediction generated":
+        action_order = 2
+    elif action_text.startswith("clinician review"):
+        action_order = 3
+    elif action_text == "pdf report generated":
+        action_order = 4
+    else:
+        action_order = 5
+    timestamp_key = (
+        timestamp.isoformat()
+        if isinstance(timestamp, datetime)
+        else str(timestamp or "")
+    )
+    return timestamp_key, action_order, action_text
 
 
 def _report_final_esi(
@@ -1342,11 +1374,27 @@ def _threshold_profile_text(prediction: Prediction | None) -> str:
     return f"Backend safety gate / {_readable_value(prediction.final_source)}"
 
 
-def _risk_flags_text(prediction: Prediction | None) -> str:
+def _safety_escalation_triggers_text(prediction: Prediction | None) -> str:
     triggered = _triggered_safety_rules(prediction)
     if not triggered:
-        return "None selected"
+        return "None triggered"
     return "; ".join(_safety_rule_label(rule.get("rule_id")) for rule in triggered)
+
+
+def _documented_selection_text(raw_value: str | None) -> str:
+    values = _json_or_default(raw_value, None)
+    if not isinstance(values, list):
+        return "Not documented"
+    documented = [
+        value.strip()
+        for value in values
+        if isinstance(value, str) and value.strip()
+    ]
+    if not documented:
+        return "Not documented"
+    if documented == ["None reported"]:
+        return "None reported"
+    return "; ".join(documented)
 
 
 def _safety_gate_status(prediction: Prediction | None) -> str:
@@ -1799,6 +1847,12 @@ def _display(value: Any) -> str:
     if isinstance(value, bool):
         return _bool_label(value)
     return str(value)
+
+
+def _audit_timestamp(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S UTC")
+    return _display(value)
 
 
 def _safety_rule_label(rule_id: Any) -> str:

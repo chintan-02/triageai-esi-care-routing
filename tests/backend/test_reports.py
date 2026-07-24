@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+import re
 
 from fastapi.testclient import TestClient
 from pypdf import PdfReader
@@ -140,9 +141,133 @@ def test_download_generated_report_returns_pdf() -> None:
     assert download_response.content.startswith(b"%PDF")
     assert len(download_response.content) > 500
     text = pdf_text(download_response.content)
-    assert "Clinician decision: Accept" in text
+    assert "Clinician decision: Accepted" in text
     assert "Clinician final ESI:" in text
     assert "Important Review Context Retained" in text
+    assert "Safety escalation triggers" in text
+    assert "Clinician-selected risk flags" in text
+
+
+def test_pdf_separates_selected_risk_flags_comorbidities_and_safety_triggers() -> None:
+    payload = {
+        **valid_intake_payload(),
+        "oxygen_saturation": 91,
+        "risk_flags": ["Chest pain"],
+        "comorbidities": ["Hypertension"],
+    }
+    predict_response = client.post("/predict", json=payload)
+    assessment_id = predict_response.json()["assessment_id"]
+
+    detail = client.get(f"/assessments/{assessment_id}").json()
+    assert detail["risk_flags"] == ["Chest pain"]
+    assert detail["comorbidities"] == ["Hypertension"]
+
+    report_response = client.post(
+        "/reports/generate",
+        json={"assessment_id": assessment_id, "include_audit": True},
+    )
+    text = pdf_text(client.get(report_response.json()["download_url"]).content)
+
+    assert "Clinician-selected risk flags" in text
+    assert "Chest pain" in text
+    assert "Comorbidities" in text
+    assert "Hypertension" in text
+    assert "Safety escalation triggers" in text
+    assert "Oxygen saturation below 92%" in text
+
+
+def test_pdf_preserves_multiple_comorbidities() -> None:
+    predict_response = client.post(
+        "/predict",
+        json={
+            **valid_intake_payload(),
+            "comorbidities": ["Diabetes", "Hypertension", "Cardiac disease"],
+        },
+    )
+    report_response = client.post(
+        "/reports/generate",
+        json={
+            "assessment_id": predict_response.json()["assessment_id"],
+            "include_audit": True,
+        },
+    )
+    text = pdf_text(client.get(report_response.json()["download_url"]).content)
+
+    assert "Diabetes; Hypertension; Cardiac disease" in text
+
+
+def test_pdf_distinguishes_explicit_none_from_undocumented_selections() -> None:
+    none_response = client.post(
+        "/predict",
+        json={**valid_intake_payload(), "comorbidities": ["None reported"]},
+    )
+    none_report = client.post(
+        "/reports/generate",
+        json={
+            "assessment_id": none_response.json()["assessment_id"],
+            "include_audit": True,
+        },
+    )
+    none_text = pdf_text(client.get(none_report.json()["download_url"]).content)
+    assert "Comorbidities\nNone reported" in none_text
+
+    undocumented_response = client.post("/predict", json=valid_intake_payload())
+    undocumented_report = client.post(
+        "/reports/generate",
+        json={
+            "assessment_id": undocumented_response.json()["assessment_id"],
+            "include_audit": True,
+        },
+    )
+    undocumented_text = pdf_text(
+        client.get(undocumented_report.json()["download_url"]).content
+    )
+    assert "Clinician-selected risk flags\nNot documented" in undocumented_text
+    assert "Comorbidities\nNot documented" in undocumented_text
+
+
+def test_pdf_audit_is_chronological_deterministic_and_shows_seconds() -> None:
+    predict_response = client.post("/predict", json=reviewed_nlp_intake_payload())
+    assessment_id = predict_response.json()["assessment_id"]
+    review_response = client.post(
+        "/clinician-review",
+        json={
+            "assessment_id": assessment_id,
+            "clinician_id": "clinician-123",
+            "action": "accept",
+            "final_esi": predict_response.json()["final_esi"],
+            "notes": "Reviewed and accepted.",
+        },
+    )
+    assert review_response.status_code == 200
+
+    report_response = client.post(
+        "/reports/generate",
+        json={"assessment_id": assessment_id, "include_audit": True},
+    )
+    text = pdf_text(client.get(report_response.json()["download_url"]).content)
+    audit_text = text[text.rfind("Audit Metadata / Audit Trail") :]
+    normalized_audit_text = " ".join(audit_text.split())
+
+    ordered_actions = [
+        "Assessment created",
+        "Clinical NLP extraction reviewed",
+        "Prediction generated",
+        "Clinician review accepted",
+        "PDF report generated",
+    ]
+    positions = [normalized_audit_text.find(action) for action in ordered_actions]
+    assert all(position >= 0 for position in positions)
+    assert positions == sorted(positions)
+    assert (
+        len(
+            re.findall(
+                r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC",
+                normalized_audit_text,
+            )
+        )
+        >= 5
+    )
 
 
 def test_pdf_includes_reviewed_clinical_nlp_evidence_without_unsafe_metadata() -> None:

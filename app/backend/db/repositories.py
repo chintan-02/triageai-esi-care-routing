@@ -50,6 +50,16 @@ def create_assessment(db: Session, intake: PatientIntakeRequest) -> Assessment:
         pregnancy=intake.pregnancy,
         arrival_mode=intake.arrival_mode,
         additional_context=intake.additional_context,
+        risk_flags_json=(
+            json.dumps(intake.risk_flags)
+            if intake.risk_flags is not None
+            else None
+        ),
+        comorbidities_json=(
+            json.dumps(intake.comorbidities)
+            if intake.comorbidities is not None
+            else None
+        ),
     )
     db.add(assessment)
     db.commit()
@@ -138,7 +148,7 @@ def list_audit_logs_for_assessment(
     statement = (
         select(AuditLog)
         .where(AuditLog.assessment_id == assessment_id)
-        .order_by(AuditLog.created_at.asc())
+        .order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
     )
     return list(db.scalars(statement).all())
 

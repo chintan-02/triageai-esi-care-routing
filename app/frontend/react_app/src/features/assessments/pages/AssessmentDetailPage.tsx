@@ -153,9 +153,9 @@ function normalizeReviewStatus(value: unknown): ReviewStatus {
   return 'pending';
 }
 
-function normalizeReviewerRole(value: unknown): ClinicianReview['role'] {
+function normalizeReviewerRole(value: unknown, authenticatedRole?: ClinicianReview['role']): ClinicianReview['role'] {
   if (value === 'Nurse' || value === 'Doctor' || value === 'Admin' || value === 'Demo Clinician') return value;
-  return 'Nurse';
+  return authenticatedRole ?? 'Demo Clinician';
 }
 
 function normalizeProbabilities(probabilities: Record<string, number> | undefined): Record<string, number> {
@@ -209,6 +209,7 @@ function compactAuditMetadata(action: string, details: unknown): Array<{ label: 
     items.push(
       auditMetadataItem(payload, ['clinician_final_esi', 'final_esi'], 'Final ESI'),
       auditMetadataItem(payload, ['clinician_id', 'reviewer'], 'Reviewer'),
+      auditMetadataItem(payload, ['reviewer_role'], 'Reviewer role'),
       auditMetadataItem(payload, ['override_reason'], 'Override reason'),
       auditMetadataItem(payload, ['review_note', 'notes'], 'Review note'),
     );
@@ -310,13 +311,22 @@ function modelFamilyFromVersion(version: string): string {
   return version.toLowerCase().includes('lightgbm') ? 'LightGBM' : 'Backend model';
 }
 
-function mapBackendAssessment(detail: AssessmentDetail): AssessmentRecordWithRawAudit {
+function mapBackendAssessment(
+  detail: AssessmentDetail,
+  authenticatedReviewer?: { role?: ClinicianReview['role']; identifiers: string[] },
+): AssessmentRecordWithRawAudit {
   const latestPrediction = detail.latest_prediction;
   const latestReview = detail.latest_clinician_review;
   const predictedEsi = esiLevelOrFallback(latestPrediction?.predicted_esi ?? detail.model_predicted_esi, 3);
   const finalEsi = esiLevelOrFallback(latestPrediction?.final_esi ?? detail.final_esi, predictedEsi);
   const age = numberOrZero(detail.age ?? detail.intake?.patient_age);
   const modelVersion = textOrFallback(latestPrediction?.model_version ?? detail.model_version, 'Backend model version unavailable');
+  const reviewer = textOrFallback(detail.reviewer ?? latestReview?.clinician_id, 'Unassigned');
+  const authenticatedRole = authenticatedReviewer?.identifiers.some(
+    (identifier) => identifier.trim().toLowerCase() === reviewer.trim().toLowerCase()
+  )
+    ? authenticatedReviewer.role
+    : undefined;
 
   return {
     id: detail.assessment_id,
@@ -361,8 +371,8 @@ function mapBackendAssessment(detail: AssessmentDetail): AssessmentRecordWithRaw
     },
     review: {
       status: normalizeReviewStatus(detail.review_status_normalized ?? detail.review_status ?? latestReview?.clinician_decision),
-      reviewer: textOrFallback(detail.reviewer ?? latestReview?.clinician_id, 'Unassigned'),
-      role: normalizeReviewerRole(detail.reviewer_role),
+      reviewer,
+      role: normalizeReviewerRole(detail.reviewer_role ?? latestReview?.reviewer_role, authenticatedRole),
       finalDecision: esiLevelOrFallback(latestReview?.clinician_final_esi ?? detail.final_esi, finalEsi),
       note: textOrFallback(latestReview?.review_note ?? latestReview?.override_reason, 'Awaiting clinician review.'),
       reviewedAt: latestReview?.created_at ?? undefined
@@ -411,14 +421,17 @@ export function AssessmentDetailPage() {
     setLoadError(null);
     try {
       const detail = await getAssessment(id);
-      setRecord(mapBackendAssessment(detail));
+      setRecord(mapBackendAssessment(detail, {
+        role: user?.role,
+        identifiers: [user?.email, user?.name].filter((value): value is string => Boolean(value))
+      }));
     } catch (error) {
       setRecord(null);
       setLoadError(error instanceof Error ? error.message : 'Unable to load this backend assessment.');
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [id, user?.email, user?.name, user?.role]);
 
   useEffect(() => {
     void loadAssessment();
@@ -514,6 +527,7 @@ export function AssessmentDetailPage() {
       await submitClinicianReview({
         assessment_id: record.id,
         clinician_id: actingReviewer,
+        reviewer_role: user?.role,
         action: effectiveStatus === 'overridden' ? 'override' : 'accept',
         final_esi: savedFinalDecision,
         override_reason: effectiveStatus === 'overridden' ? note : null,
@@ -583,7 +597,9 @@ export function AssessmentDetailPage() {
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 {review.status === 'pending'
                   ? 'Clinician sign-off is required for the current final routing decision.'
-                  : 'The recorded clinician decision remains available in the assessment audit trail.'}
+                  : review.status === 'accepted'
+                    ? 'Sign-off is recorded. Use Amend decision only when a later clinician change is intentional.'
+                    : 'An amended clinician decision is recorded in the assessment audit trail.'}
               </p>
             </div>
           </div>
@@ -607,8 +623,8 @@ export function AssessmentDetailPage() {
           <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs font-semibold leading-5 text-slate-500">Decision support only. Clinician judgment remains required for final routing.</p>
             <div className="grid shrink-0 gap-3 sm:grid-cols-2">
-              <Button type="button" disabled={isSaving || !canAccept} onClick={() => saveReviewAction('accepted')}><CheckCircle2 size={17} /> Accept</Button>
-              <Button type="button" variant="secondary" disabled={isSaving || !canOverride} title={!canOverride ? 'Doctor role required to override final routing decision.' : undefined} onClick={() => saveReviewAction('overridden')}><ShieldAlert size={17} /> Override</Button>
+              <Button type="button" disabled={isSaving || !canAccept || review.status === 'accepted'} onClick={() => saveReviewAction('accepted')}><CheckCircle2 size={17} /> {review.status === 'accepted' ? 'Accepted' : review.status === 'overridden' ? 'Accept model/safety result' : 'Accept'}</Button>
+              <Button type="button" variant="secondary" disabled={isSaving || !canOverride} title={!canOverride ? 'Doctor role required to override final routing decision.' : undefined} onClick={() => saveReviewAction('overridden')}><ShieldAlert size={17} /> {review.status === 'pending' ? 'Override' : 'Amend decision'}</Button>
             </div>
           </div>
           {!canAccept && !canOverride ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600"><div className="flex gap-2 font-bold text-slate-800"><AlertTriangle size={16} /> Review unavailable</div><p className="mt-1">Your role can view this record but cannot save clinical review decisions.</p></div> : null}

@@ -40,6 +40,7 @@ class AssessmentPredictionDetail(BaseModel):
 class AssessmentClinicianReviewDetail(BaseModel):
     review_id: str
     clinician_id: str
+    reviewer_role: str | None = None
     clinician_decision: str
     clinician_final_esi: int | None = Field(default=None, ge=1, le=5)
     override_reason: str | None = None

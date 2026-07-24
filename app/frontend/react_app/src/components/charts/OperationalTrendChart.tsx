@@ -1,6 +1,5 @@
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { AssessmentRecord } from '@/types/clinical';
-import { formatShortTime } from '@/lib/formatters';
 
 export type OperationalTrendPoint = {
   createdAt: string;
@@ -25,7 +24,11 @@ export function OperationalTrendChart({
     .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
     .slice(-12)
     .map((point) => ({
-      label: formatShortTime(point.createdAt),
+      label: new Intl.DateTimeFormat(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      }).format(new Date(point.createdAt)),
       latency: typeof point.latencyMs === 'number' ? point.latencyMs : null,
       confidence: typeof point.confidence === 'number' ? Math.round(point.confidence * 100) : null
     }));
