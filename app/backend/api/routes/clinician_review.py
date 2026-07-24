@@ -74,7 +74,7 @@ def submit_clinician_review(
         review_status_normalized=review_status_normalized,
         review_status_raw=status,
         reviewer=review.clinician_id,
-        reviewer_role=None,
+        reviewer_role=review.reviewer_role,
         reviewed=status == "review_completed",
         reviewed_at=review_record.created_at,
         audit_event_created=audit_event is not None,

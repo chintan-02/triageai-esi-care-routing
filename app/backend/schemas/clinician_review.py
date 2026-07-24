@@ -14,6 +14,7 @@ class ClinicianReviewRequest(BaseModel):
         default="clinician-reviewer",
         validation_alias=AliasChoices("clinician_id", "reviewer_name"),
     )
+    reviewer_role: Literal["Nurse", "Doctor", "Admin"] | None = None
     action: Literal["accept", "override", "needs_review"] = Field(
         validation_alias=AliasChoices("action", "clinician_decision")
     )

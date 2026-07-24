@@ -54,6 +54,29 @@ def _review_status_details(assessment: Any, latest_review: Any | None) -> tuple[
     return normalized_value, normalized_value
 
 
+def _reviewer_role_from_audit(
+    db: Session,
+    assessment_id: str,
+    latest_review: Any | None,
+) -> str | None:
+    if latest_review is None:
+        return None
+    expected_action = f"clinician_review_{latest_review.action}"
+    for audit_log in reversed(
+        repositories.list_audit_logs_for_assessment(db, assessment_id)
+    ):
+        if (
+            audit_log.action != expected_action
+            or audit_log.actor_id != latest_review.clinician_id
+        ):
+            continue
+        details = _json_or_default(audit_log.details_json, {})
+        role = details.get("reviewer_role") if isinstance(details, dict) else None
+        if role in {"Nurse", "Doctor", "Admin"}:
+            return role
+    return None
+
+
 def _audit_event(
     *,
     audit_id: str,
@@ -81,16 +104,26 @@ def _audit_event(
     )
 
 
-def _risk_flags_from_safety_rules(safety_rules: list[Any]) -> list[str]:
-    flags: list[str] = []
-    for rule in safety_rules:
-        if isinstance(rule, dict):
-            flag = rule.get("rule_id") or rule.get("rule_name") or rule.get("name")
-            if flag:
-                flags.append(str(flag))
-        elif rule is not None:
-            flags.append(str(rule))
-    return flags
+def _stored_list(raw_value: str | None) -> list[str]:
+    values = _json_or_default(raw_value, [])
+    if not isinstance(values, list):
+        return []
+    return [str(value) for value in values if isinstance(value, str) and value.strip()]
+
+
+def _audit_sort_key(event: AssessmentAuditEvent) -> tuple[str, int, str]:
+    action_order = {
+        "assessment_created": 0,
+        "nlp_extraction_reviewed": 1,
+        "prediction_generated": 2,
+        "clinician_review_accept": 3,
+        "clinician_review_override": 3,
+        "clinician_review_needs_review": 3,
+        "report_generated": 4,
+        "report_regenerated": 4,
+    }
+    timestamp_key = event.created_at.isoformat() if event.created_at else ""
+    return timestamp_key, action_order.get(event.action, 5), event.audit_id
 
 
 def _patient_name(assessment: Any) -> str:
@@ -149,10 +182,7 @@ def _build_assessment_audit_events(
             )
         )
 
-    return sorted(
-        events,
-        key=lambda event: event.created_at.isoformat() if event.created_at else "",
-    )
+    return sorted(events, key=_audit_sort_key)
 
 
 @router.post("", response_model=AssessmentCreateResponse)
@@ -190,6 +220,7 @@ def list_assessments(db: Session = Depends(get_db)) -> list[AssessmentListItem]:
             assessment,
             latest_review,
         )
+        reviewer_role = _reviewer_role_from_audit(db, assessment.id, latest_review)
         safety_rules = (
             _json_or_default(latest_prediction.safety_rules_json, [])
             if latest_prediction
@@ -222,7 +253,7 @@ def list_assessments(db: Session = Depends(get_db)) -> list[AssessmentListItem]:
                 review_status=review_status_normalized,
                 review_status_normalized=review_status_normalized,
                 reviewer=latest_review.clinician_id if latest_review else None,
-                reviewer_role=None,
+                reviewer_role=reviewer_role,
                 created_at=assessment.created_at,
                 updated_at=assessment.updated_at,
                 report_ids=[
@@ -261,6 +292,8 @@ def get_assessment(
         pregnancy=assessment.pregnancy,
         arrival_mode=assessment.arrival_mode,
         additional_context=assessment.additional_context,
+        risk_flags=_stored_list(assessment.risk_flags_json),
+        comorbidities=_stored_list(assessment.comorbidities_json),
     )
 
     latest_prediction = repositories.get_latest_prediction_for_assessment(
@@ -294,11 +327,13 @@ def get_assessment(
         db,
         assessment_id,
     )
+    reviewer_role = _reviewer_role_from_audit(db, assessment_id, latest_review)
     review_detail = None
     if latest_review:
         review_detail = AssessmentClinicianReviewDetail(
             review_id=latest_review.id,
             clinician_id=latest_review.clinician_id,
+            reviewer_role=reviewer_role,
             clinician_decision=latest_review.action,
             clinician_final_esi=latest_review.final_esi,
             override_reason=latest_review.override_reason,
@@ -357,8 +392,8 @@ def get_assessment(
             "diastolic_bp": assessment.diastolic_bp,
             "oxygen_saturation": assessment.oxygen_saturation,
         },
-        risk_flags=_risk_flags_from_safety_rules(safety_rules),
-        comorbidities=[],
+        risk_flags=_stored_list(assessment.risk_flags_json),
+        comorbidities=_stored_list(assessment.comorbidities_json),
         final_esi=final_esi,
         model_predicted_esi=latest_prediction.predicted_esi if latest_prediction else None,
         safety_escalated=safety_escalated,
@@ -375,7 +410,7 @@ def get_assessment(
         review_status=review_status,
         review_status_normalized=review_status_normalized,
         reviewer=latest_review.clinician_id if latest_review else None,
-        reviewer_role=None,
+        reviewer_role=reviewer_role,
         created_at=assessment.created_at,
         updated_at=assessment.updated_at,
         intake=intake,

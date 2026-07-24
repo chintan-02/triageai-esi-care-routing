@@ -39,4 +39,6 @@ class PatientIntakeRequest(BaseModel):
     pregnancy: bool | None = None
     arrival_mode: str | None = None
     additional_context: str | None = None
+    risk_flags: list[str] | None = None
+    comorbidities: list[str] | None = None
     nlp_extraction_audit: NlpExtractionAudit | None = None

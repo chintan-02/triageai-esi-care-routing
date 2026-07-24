@@ -174,6 +174,7 @@ function detailAuditMetadata(item: AssessmentListItem, event?: AssessmentAuditEv
     auditMetadataItem(payload, ['include_audit'], 'Includes audit trail'),
     auditMetadataItem(payload, ['download_url'], 'Download path'),
     auditMetadataItem(payload, ['override_reason'], 'Override reason'),
+    auditMetadataItem(payload, ['reviewer_role'], 'Reviewer role'),
     auditMetadataItem(payload, ['review_note', 'notes'], 'Review note')
   ];
 
@@ -256,10 +257,12 @@ function summaryAuditMetadata(item: AssessmentListItem, event: AssessmentAuditEv
 
   if (event.action.startsWith('clinician_review_')) {
     const reviewer = readableAuditValue(payload.clinician_id ?? payload.reviewer);
+    const reviewerRole = readableAuditValue(payload.reviewer_role);
     const final = readableAuditValue(payload.clinician_final_esi ?? payload.final_esi);
     const overrideReason = shortVisibleText(payload.override_reason);
     return [
       ...(reviewer ? [{ label: 'Reviewer', value: reviewer }] : []),
+      ...(reviewerRole ? [{ label: 'Reviewer role', value: reviewerRole }] : []),
       ...(final ? [{ label: 'Final clinician ESI', value: `ESI ${final}` }] : []),
       ...(overrideReason ? [{ label: 'Override reason', value: overrideReason }] : [])
     ];

@@ -10,6 +10,7 @@ def build_audit_details(action: str, payload: dict[str, Any]) -> dict[str, Any]:
     note = clean_human_readable_text(payload.get("notes") or payload.get("review_note"))
     override_reason = clean_human_readable_text(payload.get("override_reason"))
     clinician_id = payload.get("clinician_id") or payload.get("reviewer_name")
+    reviewer_role = payload.get("reviewer_role")
 
     if action == "accept":
         message = "Clinician accepted final routing decision."
@@ -22,6 +23,7 @@ def build_audit_details(action: str, payload: dict[str, Any]) -> dict[str, Any]:
         "action": action,
         "clinician_decision": action,
         "clinician_id": clinician_id,
+        "reviewer_role": reviewer_role,
         "clinician_final_esi": final_esi,
         "override_reason": override_reason,
         "review_note": note,

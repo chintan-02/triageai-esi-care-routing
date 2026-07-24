@@ -24,6 +24,14 @@ export interface ReadyResponse {
   model_source?: ModelSource | null;
   selected_calibration_method?: string | null;
   threshold_config_loaded?: boolean;
+  decision_threshold?: number | null;
+  model_metrics?: {
+    accuracy?: number;
+    macro_f1?: number;
+    weighted_f1?: number;
+    esi5_f1?: number;
+    unsafe_esi3_to_esi5_downgrade_rate?: number;
+  } | null;
   feature_count?: number | null;
   class_order?: string[] | null;
   model_error: string | null;
@@ -65,6 +73,8 @@ export interface PatientIntakePayload {
   pregnancy?: boolean | null;
   arrival_mode?: string | null;
   additional_context?: string | null;
+  risk_flags?: string[] | null;
+  comorbidities?: string[] | null;
   nlp_extraction_audit?: NlpExtractionAuditPayload;
 }
 
@@ -119,6 +129,7 @@ export interface AssessmentPredictionDetail {
 export interface AssessmentClinicianReviewDetail {
   review_id: string;
   clinician_id: string;
+  reviewer_role?: string | null;
   clinician_decision: string;
   clinician_final_esi?: EsiLevel | null;
   override_reason?: string | null;
@@ -204,6 +215,7 @@ export interface AssessmentAuditTrailResponse {
 export interface ClinicianReviewPayload {
   assessment_id: string;
   clinician_id?: string;
+  reviewer_role?: 'Nurse' | 'Doctor' | 'Admin';
   action: ClinicianReviewAction;
   final_esi?: EsiLevel | null;
   override_reason?: string | null;

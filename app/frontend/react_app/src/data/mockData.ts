@@ -82,30 +82,41 @@ export const riskFlagOptions = [
 
 export const comorbidityOptions = ['Diabetes', 'Hypertension', 'COPD/Asthma', 'Cardiac disease', 'Kidney disease', 'Cancer history', 'None reported'];
 
+function documentedVital(value: number | null): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
 /** Core prediction simulator shared by the live intake flow and the seeded demo records. */
 export function simulatePrediction(payload: IntakePayload, latencyMsOverride?: number): PredictionResponse {
   const start = performance.now();
   const riskText = `${payload.chiefComplaint} ${payload.symptomText} ${payload.riskFlags.join(' ')}`.toLowerCase();
   const riskFlags = payload.riskFlags.map((flag) => flag.toLowerCase());
   const unstableVitals =
-    payload.vitals.spo2 < 92 || payload.vitals.systolicBp < 95 || payload.vitals.respiratoryRate >= 24 || payload.vitals.heartRate >= 115;
+    (documentedVital(payload.vitals.spo2) && payload.vitals.spo2 < 92)
+    || (documentedVital(payload.vitals.systolicBp) && payload.vitals.systolicBp < 95)
+    || (documentedVital(payload.vitals.respiratoryRate) && payload.vitals.respiratoryRate >= 24)
+    || (documentedVital(payload.vitals.heartRate) && payload.vitals.heartRate >= 115);
   const abnormalVitals =
-    unstableVitals || payload.vitals.spo2 < 95 || payload.vitals.systolicBp < 100 || payload.vitals.respiratoryRate >= 22 || payload.vitals.heartRate >= 110;
+    unstableVitals
+    || (documentedVital(payload.vitals.spo2) && payload.vitals.spo2 < 95)
+    || (documentedVital(payload.vitals.systolicBp) && payload.vitals.systolicBp < 100)
+    || (documentedVital(payload.vitals.respiratoryRate) && payload.vitals.respiratoryRate >= 22)
+    || (documentedVital(payload.vitals.heartRate) && payload.vitals.heartRate >= 110);
   const highRiskComplaint = ['chest', 'breath', 'altered', 'severe', 'pregnancy'].some((term) => riskText.includes(term));
 
   let predictedEsi: EsiLevel = 4;
   let probabilities: Record<string, number> = { 'ESI 3': 0.25, 'ESI 4': 0.56, 'ESI 5': 0.19 };
 
-  if (highRiskComplaint || unstableVitals || payload.vitals.painScore >= 7) {
+  if (highRiskComplaint || unstableVitals || (documentedVital(payload.vitals.painScore) && payload.vitals.painScore >= 7)) {
     predictedEsi = 3;
     probabilities = { 'ESI 3': 0.64, 'ESI 4': 0.24, 'ESI 5': 0.12 };
-  } else if (payload.vitals.painScore <= 2 && payload.riskFlags.length === 0) {
+  } else if (documentedVital(payload.vitals.painScore) && payload.vitals.painScore <= 2 && payload.riskFlags.length === 0) {
     predictedEsi = 5;
     probabilities = { 'ESI 3': 0.16, 'ESI 4': 0.22, 'ESI 5': 0.62 };
   }
 
   const ruleHits: RuleHit[] = [];
-  if (payload.vitals.spo2 < 92) {
+  if (documentedVital(payload.vitals.spo2) && payload.vitals.spo2 < 92) {
     ruleHits.push({
       id: 'rule_spo2_low',
       label: 'Low oxygen saturation safety rule',
@@ -114,7 +125,7 @@ export function simulatePrediction(payload: IntakePayload, latencyMsOverride?: n
       escalatesTo: 2
     });
   }
-  if (payload.vitals.respiratoryRate >= 30) {
+  if (documentedVital(payload.vitals.respiratoryRate) && payload.vitals.respiratoryRate >= 30) {
     ruleHits.push({
       id: 'rule_critical_respiratory_rate',
       label: 'Critical respiratory rate safety rule',
@@ -123,7 +134,7 @@ export function simulatePrediction(payload: IntakePayload, latencyMsOverride?: n
       escalatesTo: 2
     });
   }
-  if (payload.vitals.systolicBp < 95) {
+  if (documentedVital(payload.vitals.systolicBp) && payload.vitals.systolicBp < 95) {
     ruleHits.push({
       id: 'rule_hypotension',
       label: 'Low blood pressure safety rule',
@@ -159,7 +170,7 @@ export function simulatePrediction(payload: IntakePayload, latencyMsOverride?: n
       escalatesTo: 2
     });
   }
-  if ((riskFlags.includes('severe pain') || payload.vitals.painScore >= 8) && abnormalVitals) {
+  if ((riskFlags.includes('severe pain') || (documentedVital(payload.vitals.painScore) && payload.vitals.painScore >= 8)) && abnormalVitals) {
     ruleHits.push({
       id: 'rule_severe_pain_abnormal_vitals',
       label: 'Severe pain with abnormal vitals safety rule',

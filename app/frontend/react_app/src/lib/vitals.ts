@@ -1,8 +1,9 @@
-import type { Vitals } from '@/types/clinical';
+import type { DraftVitals, Vitals } from '@/types/clinical';
 
 export type VitalKey = keyof Vitals;
-export type VitalFlag = 'normal' | 'abnormal' | 'critical';
+export type VitalFlag = 'not-entered' | 'normal' | 'abnormal' | 'critical';
 export type AgeBand = 'infant' | 'toddler' | 'child' | 'adolescent' | 'adult';
+export type VitalValues = Vitals | DraftVitals;
 
 interface VitalRange {
   criticalLow?: number;
@@ -14,7 +15,7 @@ interface VitalRange {
 const ADULT_RANGES: Record<VitalKey, VitalRange> = {
   heartRate: { criticalLow: 40, low: 60, high: 100, criticalHigh: 130 },
   respiratoryRate: { criticalLow: 8, low: 12, high: 20, criticalHigh: 28 },
-  systolicBp: { criticalLow: 85, low: 90, high: 140, criticalHigh: 180 },
+  systolicBp: { criticalLow: 90, low: 100, high: 140, criticalHigh: 180 },
   diastolicBp: { criticalLow: 45, low: 60, high: 90, criticalHigh: 110 },
   temperatureC: { criticalLow: 35, low: 36.1, high: 38, criticalHigh: 39.5 },
   spo2: { criticalLow: 90, low: 94, criticalHigh: 101 },
@@ -63,7 +64,8 @@ export function vitalRange(key: VitalKey, age?: number): VitalRange {
   return PEDIATRIC_RANGES[band][key] ?? ADULT_RANGES[key];
 }
 
-export function vitalFlag(key: VitalKey, value: number, age?: number): VitalFlag {
+export function vitalFlag(key: VitalKey, value: number | null | undefined, age?: number): VitalFlag {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'not-entered';
   const range = vitalRange(key, age);
   if (!range) return 'normal';
   if (range.criticalLow !== undefined && value < range.criticalLow) return 'critical';
@@ -73,12 +75,41 @@ export function vitalFlag(key: VitalKey, value: number, age?: number): VitalFlag
   return 'normal';
 }
 
+function moreSevereFlag(first: VitalFlag, second: VitalFlag): VitalFlag {
+  if (first === 'critical' || second === 'critical') return 'critical';
+  if (first === 'abnormal' || second === 'abnormal') return 'abnormal';
+  if (first === 'not-entered') return second;
+  if (second === 'not-entered') return first;
+  return 'normal';
+}
+
+export function bloodPressureFlag(vitals: VitalValues, age?: number): VitalFlag {
+  return moreSevereFlag(
+    vitalFlag('systolicBp', vitals.systolicBp, age),
+    vitalFlag('diastolicBp', vitals.diastolicBp, age),
+  );
+}
+
+export function watchVitalCount(vitals: VitalValues, age?: number): number {
+  const flags = [
+    vitalFlag('heartRate', vitals.heartRate, age),
+    vitalFlag('respiratoryRate', vitals.respiratoryRate, age),
+    bloodPressureFlag(vitals, age),
+    vitalFlag('temperatureC', vitals.temperatureC, age),
+    vitalFlag('spo2', vitals.spo2, age),
+    vitalFlag('painScore', vitals.painScore, age),
+  ];
+  return flags.filter((flag) => flag === 'abnormal' || flag === 'critical').length;
+}
+
 export function vitalFlagTone(flag: VitalFlag) {
   switch (flag) {
     case 'critical':
       return 'border-red-300 bg-red-50 text-red-800';
     case 'abnormal':
       return 'border-amber-300 bg-amber-50 text-amber-800';
+    case 'not-entered':
+      return 'border-slate-200 bg-white text-slate-700';
     default:
       return 'border-slate-200 bg-slate-50 text-slate-950';
   }
@@ -90,6 +121,8 @@ export function vitalStatusLabel(flag: VitalFlag) {
       return 'Critical';
     case 'abnormal':
       return 'Watch';
+    case 'not-entered':
+      return 'Not entered';
     default:
       return 'In range';
   }

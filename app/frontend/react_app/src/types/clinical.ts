@@ -25,12 +25,16 @@ export interface Vitals {
   painScore: number;
 }
 
+export type DraftVitals = {
+  [Key in keyof Vitals]: number | null;
+};
+
 export interface IntakePayload {
   patient: PatientProfile;
   chiefComplaint: string;
   symptomText: string;
   duration: string;
-  vitals: Vitals;
+  vitals: DraftVitals;
   riskFlags: string[];
   comorbidities: string[];
 }

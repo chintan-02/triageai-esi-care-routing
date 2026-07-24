@@ -1,6 +1,10 @@
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
 from app.backend.api.main import app
+from app.backend.db import repositories
+from app.backend.db.session import SessionLocal
 
 
 client = TestClient(app)
@@ -52,6 +56,23 @@ def test_get_assessment_returns_created_record() -> None:
     assert body["is_placeholder"] is False
 
 
+def test_get_assessment_preserves_selected_risk_flags_and_comorbidities() -> None:
+    payload = {
+        **valid_intake_payload(),
+        "risk_flags": ["Chest pain", "Abnormal vital signs"],
+        "comorbidities": ["Hypertension", "Cardiac disease"],
+    }
+    create_response = client.post("/assessments", json=payload)
+    assessment_id = create_response.json()["assessment_id"]
+
+    body = client.get(f"/assessments/{assessment_id}").json()
+
+    assert body["risk_flags"] == ["Chest pain", "Abnormal vital signs"]
+    assert body["comorbidities"] == ["Hypertension", "Cardiac disease"]
+    assert body["intake"]["risk_flags"] == ["Chest pain", "Abnormal vital signs"]
+    assert body["intake"]["comorbidities"] == ["Hypertension", "Cardiac disease"]
+
+
 def test_get_assessment_returns_prediction_review_and_audit_detail() -> None:
     predict_response = client.post("/predict", json=valid_intake_payload())
     assert predict_response.status_code == 200
@@ -95,6 +116,58 @@ def test_get_assessment_returns_prediction_review_and_audit_detail() -> None:
     )
     assert created_event["details"]["status"] == "pending_review"
     assert created_event["message"] == "Assessment created and queued for clinician review."
+
+
+def test_assessment_audit_uses_stable_action_order_for_equal_timestamps() -> None:
+    payload = {
+        **valid_intake_payload(),
+        "nlp_extraction_audit": {
+            "reviewed": True,
+            "source": "clinical_intake_nlp",
+            "extracted_fields": {},
+            "safety_cues": [],
+            "missing_fields": [],
+            "evidence": [],
+            "disclaimer": "Decision support only.",
+        },
+    }
+    predict_response = client.post("/predict", json=payload)
+    assessment_id = predict_response.json()["assessment_id"]
+    client.post(
+        "/clinician-review",
+        json={
+            "assessment_id": assessment_id,
+            "clinician_id": "clinician-456",
+            "action": "accept",
+            "final_esi": predict_response.json()["final_esi"],
+        },
+    )
+
+    equal_timestamp = datetime(2026, 7, 24, 12, 34, 56, tzinfo=timezone.utc)
+    with SessionLocal() as db:
+        assessment = repositories.get_assessment_by_id(db, assessment_id)
+        prediction = repositories.get_latest_prediction_for_assessment(
+            db, assessment_id
+        )
+        audit_logs = repositories.list_audit_logs_for_assessment(db, assessment_id)
+        assert assessment is not None
+        assert prediction is not None
+        assessment.created_at = equal_timestamp
+        prediction.created_at = equal_timestamp
+        for audit_log in audit_logs:
+            audit_log.created_at = equal_timestamp
+        db.commit()
+
+    actions = [
+        event["action"]
+        for event in client.get(f"/assessments/{assessment_id}").json()["audit_trail"]
+    ]
+    assert actions == [
+        "assessment_created",
+        "nlp_extraction_reviewed",
+        "prediction_generated",
+        "clinician_review_accept",
+    ]
 
 
 def test_get_unknown_assessment_returns_404() -> None:

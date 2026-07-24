@@ -65,7 +65,7 @@ export function SettingsPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Integration checklist" description="What to connect when you drop this into the main repo." />
+          <CardHeader title="Current integration status" description="Connected backend services and remaining deployment considerations." />
           <CardBody className="space-y-3">
             {checklist.map((item) => {
               const Icon = item.icon;
@@ -95,7 +95,7 @@ export function SettingsPage() {
           ].map(([label, value]) => (
             <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</p>
-              <p className="font-data mt-2 break-words text-sm font-bold text-slate-950">{value}</p>
+              <p className="font-data mt-2 break-all text-sm font-bold text-slate-950">{value}</p>
             </div>
           ))}
         </CardBody>

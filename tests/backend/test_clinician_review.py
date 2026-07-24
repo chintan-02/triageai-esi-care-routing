@@ -47,11 +47,13 @@ def test_clinician_review_audit_details_are_clean() -> None:
         json={
             "assessment_id": assessment_id,
             "clinician_id": "clinician-456",
+            "reviewer_role": "Doctor",
             "action": "accept",
             "notes": "Reviewed by clinician.",
         },
     )
     assert response.status_code == 200
+    assert response.json()["reviewer_role"] == "Doctor"
 
     detail_response = client.get(f"/assessments/{assessment_id}")
     review_event = next(
@@ -63,8 +65,14 @@ def test_clinician_review_audit_details_are_clean() -> None:
     assert review_event["message"] == "Clinician accepted final routing decision."
     assert review_event["details"]["clinician_decision"] == "accept"
     assert review_event["details"]["clinician_id"] == "clinician-456"
+    assert review_event["details"]["reviewer_role"] == "Doctor"
     assert review_event["details"]["review_note"] == "Reviewed by clinician."
     assert "payload" not in review_event["details"]
+    assert detail_response.json()["reviewer_role"] == "Doctor"
+    assert (
+        detail_response.json()["latest_clinician_review"]["reviewer_role"]
+        == "Doctor"
+    )
 
 
 def test_clinician_review_note_spacing_is_cleaned() -> None:

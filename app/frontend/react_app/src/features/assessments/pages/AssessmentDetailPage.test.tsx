@@ -150,6 +150,28 @@ function assessmentDetail(): AssessmentDetail {
   };
 }
 
+function acceptedAssessmentDetail(): AssessmentDetail {
+  const detail = assessmentDetail();
+  return {
+    ...detail,
+    status: 'review_completed',
+    review_status: 'accepted',
+    review_status_normalized: 'accepted',
+    reviewer: 'rivera@example.test',
+    reviewer_role: 'Doctor',
+    latest_clinician_review: {
+      review_id: 'REVIEW-1',
+      clinician_id: 'rivera@example.test',
+      reviewer_role: 'Doctor',
+      clinician_decision: 'accept',
+      clinician_final_esi: 2,
+      review_note: 'Current final routing decision accepted.',
+      reviewed: true,
+      created_at: '2026-07-14T15:05:00Z'
+    }
+  };
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/assessments/AS-100']}>
@@ -282,11 +304,31 @@ describe('AssessmentDetailPage', () => {
       expect(submitClinicianReview).toHaveBeenCalledWith({
         assessment_id: 'AS-100',
         clinician_id: 'rivera@example.test',
+        reviewer_role: 'Doctor',
         action: 'accept',
         final_esi: 2,
         override_reason: null,
         notes: 'Current final routing decision accepted.'
       });
     });
+  });
+
+  it('renders the authenticated reviewer role consistently and prevents duplicate acceptance', async () => {
+    getAssessment.mockResolvedValue(acceptedAssessmentDetail());
+    renderPage();
+
+    const signOffHeading = await screen.findByRole('heading', { name: 'Clinical Review / Sign-off' });
+    const signOffCard = signOffHeading.closest('section');
+    expect(signOffCard).not.toBeNull();
+    expect(within(signOffCard as HTMLElement).getByText('rivera@example.test')).toBeInTheDocument();
+    expect(within(signOffCard as HTMLElement).getByText('Doctor')).toBeInTheDocument();
+    expect(within(signOffCard as HTMLElement).getByText('Signed in: rivera@example.test (Doctor)')).toBeInTheDocument();
+
+    const acceptedButton = screen.getByRole('button', { name: 'Accepted' });
+    expect(acceptedButton).toBeDisabled();
+    fireEvent.click(acceptedButton);
+    expect(submitClinicianReview).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Amend decision' })).toBeEnabled();
+    expect(screen.getByText(/Sign-off is recorded/)).toBeInTheDocument();
   });
 });

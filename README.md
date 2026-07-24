@@ -7,7 +7,7 @@
 ![React](https://img.shields.io/badge/Frontend-React_+_TypeScript-20232A?style=flat-square&logo=react&logoColor=61DAFB)
 ![LightGBM](https://img.shields.io/badge/Model-LightGBM_V2-02569B?style=flat-square)
 ![Testing](https://img.shields.io/badge/Testing-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
-![Status](https://img.shields.io/badge/Status-Active_Development-F59E0B?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Demo_Ready-22C55E?style=flat-square)
 [![CI](https://github.com/chintan-02/triageai-esi-care-routing/actions/workflows/ci.yml/badge.svg)](https://github.com/chintan-02/triageai-esi-care-routing/actions/workflows/ci.yml)
 
 **A review-first healthcare AI decision-support workflow for structured clinical intake, ESI care routing, safety escalation, clinician review, auditability, and PDF reporting.**
@@ -25,14 +25,13 @@
 
 ## Project Status
 
-- React + FastAPI migration is completed for local development and demonstration workflows.
+- The project is at the completed demo-freeze stage for local demonstration.
+- The React + FastAPI application is completed for local development and demonstration workflows.
 - The final LightGBM V2 ESI 3/4/5 model registry is integrated through the backend.
 - The backend and database are the source of truth for assessments, predictions, reviews, audit events, dashboard data, and official PDF reports.
 - The React frontend is connected to real FastAPI endpoints by default.
-- A backend **Clinical Intake NLP Safety Layer** is implemented through `POST /nlp/extract-intake`.
-- The NLP layer extracts reviewable fields, source-text evidence, safety cues, and missing vital-sign information from clinician free-text notes.
-- React-based review and correction of extracted NLP fields is implemented before prediction.
-- A safe speech/transcript workflow is implemented for copying transcript text into the clinical note before NLP extraction and clinician review.
+- NLP extraction, clinician review and correction, audit evidence, and PDF evidence are completed.
+- Recorded audio is submitted through `POST /speech/transcribe`; Azure Speech is supported when configured, with a safe backend fallback when it is unavailable or unconfigured.
 - The legacy Streamlit frontend is retained under `app/frontend/streamlit_app/`.
 - SQLite is used for local development and demonstration.
 - PostgreSQL is the recommended database for professional cloud deployment.
@@ -65,15 +64,18 @@ The system is positioned as **clinical workflow decision support**, not diagnosi
 
 - Provides a React healthcare SaaS-style workflow with a login/demo shell and role-oriented pages.
 - Captures structured patient intake through the New Assessment workflow.
+- Supports recorded-audio and transcript intake for review before structured extraction.
 - Converts clinician free-text notes into reviewable structured fields through the Clinical Intake NLP Safety Layer.
 - Returns source-text evidence for extracted values rather than presenting unsupported fields as verified truth.
 - Identifies configured safety cues and missing vital-sign information.
+- Stores reviewed NLP extraction evidence in the backend audit trail.
 - Calls the FastAPI backend `POST /predict` endpoint to create real backend assessments.
 - Runs the final LightGBM V2 ESI 3/4/5 prediction path through the backend model registry.
 - Applies transparent safety-rule escalation for high-risk intake signals.
 - Supports human clinician accept, override, and needs-review actions.
 - Displays assessment queue, assessment detail, command center, reports, audit trail, model monitoring, and settings pages.
 - Generates official PDF decision-support summaries through the backend ReportLab service.
+- Includes reviewed NLP evidence in backend-generated PDF summaries.
 - Persists prediction latency and exposes it through backend responses and frontend views.
 - Stores audit events server-side for prediction, review, and report-generation traceability.
 - Includes a local reset and seed workflow for repeatable demonstration records.
@@ -271,7 +273,8 @@ The NLP layer:
 | Feature count | 273 |
 | Class order | `ESI_3`, `ESI_4`, `ESI_5` |
 | Calibration method | Raw LightGBM probability retained |
-| Threshold configuration | Loaded |
+| Decision threshold | `0.60` |
+| Threshold configuration | Loaded from the versioned model registry |
 | Placeholder model | No, when validated final-registry artifacts are available |
 
 Verified metrics from:
@@ -442,7 +445,7 @@ The legacy browser-side PDF helper is retained for fallback experimentation. Off
 GET /assessments/{assessment_id}/report/pdf
 ```
 
-The NLP endpoint is implemented in the backend. A dedicated React review-and-correction interface for extracted NLP fields remains part of the next integration phase.
+The New Intake workflow integrates `POST /nlp/extract-intake`, requires clinician review and correction before prediction, and preserves reviewed evidence in backend audit and report workflows.
 
 ---
 
@@ -708,6 +711,21 @@ Current coverage includes:
 
 ---
 
+## Final Demo-Freeze Validation
+
+- Backend: 90 passing tests
+- Frontend: 12 test files and 38 passing tests
+- React production build: passed
+- Docker Compose full-stack run: passed
+- Backend readiness: passed
+- Model loaded: `true`
+- Model feature count: `273`
+- Model class order: `ESI_3`, `ESI_4`, `ESI_5`
+
+These results validate the local demonstration workflow; they do not represent clinical validation.
+
+---
+
 ## Example Demonstration Flow
 
 1. Start the backend on port `8001`.
@@ -724,45 +742,56 @@ Current coverage includes:
 
 ---
 
-## Screenshots
+## Screenshot Plan — F.1
 
-Final workflow screenshots will be added after the React NLP review integration and final demonstration-data reset.
-
-Planned screenshot set:
+Final recruiter/professor screenshots are being prepared during the current documentation phase. The planned checklist is:
 
 - Command Center
-- New Assessment
-- Clinical Intake NLP review
+- New Intake
+- Clinical NLP review and evidence
+- Prediction and safety escalation
+- Clinician review
 - Assessment Detail
-- Clinician Review
-- Reports and PDF
 - Audit Trail
+- Reports and PDF
 - Model Monitoring
+- System Architecture
 
 ---
 
-## Roadmap
+## Implementation Status
 
-### Next
+### Completed
 
-- Connect the Clinical Intake NLP endpoint to the React New Assessment workflow
-- Add clinician review and correction of extracted fields before prediction
-- Preserve raw note and reviewed structured fields in the audit workflow
-- Add clear extraction evidence and missing-information displays
-- Replace the placeholder speech route with real speech-to-text integration
-- Add final screenshot and demonstration documentation
+- Review-first clinical NLP extraction with source-text evidence, safety cues, and missing-information handling
+- React review and correction before prediction
+- Reviewed NLP evidence preserved in backend audit workflows
+- Reviewed NLP evidence included in backend-generated PDF reports
+- Recorded-audio and transcript intake through `POST /speech/transcribe`
+- Azure Speech support when configured, with a safe backend fallback when unavailable or unconfigured
+- Final LightGBM V2 ESI 3/4/5 model-registry integration
+- Transparent safety escalation
+- Clinician accept, override, and needs-review workflows
+- Docker Compose local full-stack demonstration
+- Continuous integration checks
+- Repeatable demo seed and reset workflow
+- UI regression coverage
+- Final demo-freeze validation
 
-### Later
+### Production-Readiness Requirements
 
-- Azure PostgreSQL deployment
-- Azure App Service or container deployment
-- CI/CD hardening
-- authentication and RBAC hardening
-- secure cloud secret management
-- PDF storage in Azure Blob Storage
-- monitoring and observability
-- model challenger experiments
-- ClinicalBERT or BioClinicalBERT research comparison only if evaluation justifies it
+- Prospective clinical validation
+- Workflow usability studies
+- Subgroup and fairness evaluation
+- Calibration and drift monitoring
+- Production authentication and RBAC
+- Managed PostgreSQL
+- Privacy and security controls
+- Secret management
+- Centralized observability
+- Managed report storage
+- Controlled cloud deployment
+- Governance and regulatory assessment
 
 ---
 
@@ -796,7 +825,7 @@ All model metrics listed in this README come from the final selected LightGBM V2
 
 The project avoids unsupported clinical and technical claims. It treats human review, safety escalation, auditability, uncertainty through missing-information reporting, and transparent limitations as core system requirements.
 
-The Clinical Intake NLP Safety Layer is currently implemented as a backend endpoint. Its dedicated React review interface remains planned and is not represented as completed.
+The complete review-first NLP workflow is implemented, including clinician correction before prediction, reviewed evidence storage in the audit trail, and reviewed evidence inclusion in backend-generated PDF reports.
 
 ---
 
