@@ -1,0 +1,23 @@
+{
+  "created_utc": "2026-07-30T16:19:40.624815+00:00",
+  "model_version": "lightgbm_v3_enhanced_eval",
+  "required_deployment_artifacts": {
+    "model_file": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/esi_345_lightgbm_v2_model.txt",
+    "feature_list": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/esi_345_lightgbm_v2_feature_list.json",
+    "onehot_encoder_and_medians": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/esi_345_lightgbm_v2_preprocessing_artifacts.joblib",
+    "threshold_config": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/esi_345_lightgbm_v2_threshold_config.json",
+    "label_mapping": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/esi_345_label_mapping.json",
+    "deployment_config": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/esi_345_deployment_config.json"
+  },
+  "reports": {
+    "test_metrics": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/reports/lightgbm_v3_test_metrics.json",
+    "validation_summary": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/reports/lightgbm_v3_validation_summary.csv",
+    "calibration_report": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/reports/probability_calibration_report.csv",
+    "calibration_deployment_decision": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/reports/calibration_deployment_decision.csv",
+    "fairness_subgroup_report": "/Users/rambo/Documents/integrated_ai/arti_404/triageai-esi-care-routing/model_registry/esi_345_lightgbm_v3/reports/fairness_subgroup_evaluation.csv"
+  },
+  "optional_not_deployed": {
+    "scaler": "not required for LightGBM V2 deployment",
+    "tokenizer": "not required for LightGBM V2 deployment"
+  }
+}
