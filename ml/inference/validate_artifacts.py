@@ -1,4 +1,4 @@
-"""Validate local ESI LightGBM V2 text artifacts without starting the API."""
+"""Validate local ESI LightGBM text artifacts without starting the API."""
 
 from pathlib import Path
 import sys
@@ -108,13 +108,24 @@ def validate_artifacts() -> bool:
     )
 
     required_validation_files = [
-        VALIDATION_DIR / "lightgbm_v2_validation_summary.csv",
-        VALIDATION_DIR / "lightgbm_v2_test_metrics.json",
         VALIDATION_DIR / "calibration_deployment_decision.csv",
         VALIDATION_DIR / "fairness_subgroup_evaluation.csv",
     ]
     for path in required_validation_files:
         checks.append(_check_exists(path.name, path))
+
+    required_validation_patterns = ["*_validation_summary.csv", "*_test_metrics.json"]
+    for pattern in required_validation_patterns:
+        matches = sorted(VALIDATION_DIR.glob(pattern))
+        checks.append(
+            _check(
+                bool(matches),
+                pattern,
+                ", ".join(match.name for match in matches)
+                if matches
+                else f"no files matching {pattern} in {VALIDATION_DIR}",
+            )
+        )
 
     if feature_list_ok and isinstance(feature_list, list):
         schema_count = len(feature_list)
@@ -141,9 +152,9 @@ def validate_artifacts() -> bool:
     if metadata_ok and metadata is not None:
         checks.append(
             _check(
-                metadata.get("model_version") == "lightgbm_v2_weight_threshold_esi345",
+                bool(metadata.get("model_version")),
                 "deployment_config",
-                "model_version is lightgbm_v2_weight_threshold_esi345",
+                f"model_version is {metadata.get('model_version')!r}",
             )
         )
         checks.append(
@@ -154,19 +165,22 @@ def validate_artifacts() -> bool:
             )
         )
 
-    if thresholds_ok and thresholds is not None:
+    if thresholds_ok and thresholds is not None and metadata_ok and metadata is not None:
         checks.append(
             _check(
-                thresholds.get("deployment_threshold") == 0.60,
+                thresholds.get("deployment_threshold") == metadata.get("deployment_threshold"),
                 "threshold_config",
-                "deployment_threshold is 0.60",
+                "deployment_threshold matches deployment_config "
+                f"({metadata.get('deployment_threshold')})",
             )
         )
         checks.append(
             _check(
-                thresholds.get("deploy_calibrated_probabilities") is False,
+                thresholds.get("deploy_calibrated_probabilities")
+                == metadata.get("deploy_calibrated_probabilities"),
                 "threshold_config",
-                "raw LightGBM probabilities are deployed",
+                "deploy_calibrated_probabilities matches deployment_config "
+                f"({metadata.get('deploy_calibrated_probabilities')})",
             )
         )
 

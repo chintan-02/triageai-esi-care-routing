@@ -48,8 +48,8 @@ def test_predict_returns_model_aware_response() -> None:
 
     if body["model_loaded"]:
         assert body["is_placeholder"] is False
-        assert body["model_version"] == "lightgbm_v2_weight_threshold_esi345"
-        assert body["selected_calibration_method"] == "raw_lightgbm_probability"
+        assert body["model_version"] == "lightgbm_v3_enhanced_eval"
+        assert body["selected_calibration_method"] == "isotonic_calibrated_probability"
         assert body["predicted_esi"] in [3, 4, 5]
         assert body["final_esi"] in [2, 3, 4, 5]
         assert body["confidence_score"] is not None
@@ -57,7 +57,7 @@ def test_predict_returns_model_aware_response() -> None:
         assert body["final_source"] in ["model", "safety_rule_override"]
         assert "Model inference is not connected yet" not in body["recommendation"]
         assert body["probability_note"] == (
-            "Raw model probabilities are not calibrated probabilities."
+            "Probabilities are calibrated using isotonic_calibrated_probability."
         )
     else:
         assert body["is_placeholder"] is True

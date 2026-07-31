@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TriageAI</string>
+    <string name="title_activity_main">TriageAI</string>
+    <string name="package_name">com.triageai.esicarerouting</string>
+    <string name="custom_url_scheme">com.triageai.esicarerouting</string>
+</resources>

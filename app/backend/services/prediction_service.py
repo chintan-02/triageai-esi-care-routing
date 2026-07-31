@@ -33,6 +33,15 @@ DECISION_SUPPORT_DISCLAIMER = (
 )
 
 RAW_PROBABILITY_NOTE = "Raw model probabilities are not calibrated probabilities."
+CALIBRATED_PROBABILITY_NOTE_TEMPLATE = "Probabilities are calibrated using {method}."
+
+
+def _probability_note(bundle: Any) -> str:
+    thresholds = bundle.thresholds or {}
+    if thresholds.get("deploy_calibrated_probabilities"):
+        method = bundle.selected_calibration_method or "the deployed calibration method"
+        return CALIBRATED_PROBABILITY_NOTE_TEMPLATE.format(method=method)
+    return RAW_PROBABILITY_NOTE
 
 
 def validate_prediction_contract(
@@ -193,5 +202,5 @@ def predict_esi_for_intake(intake: PatientIntakeRequest) -> ESIPredictionRespons
         ),
         is_placeholder=False,
         disclaimer=DECISION_SUPPORT_DISCLAIMER,
-        probability_note=RAW_PROBABILITY_NOTE,
+        probability_note=_probability_note(bundle),
     )

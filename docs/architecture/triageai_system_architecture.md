@@ -34,7 +34,7 @@ flowchart LR
         nlpLayer["Clinical NLP safety layer"]
         preModelRules["Pre-model safety rules and input checks"]
         featureBuilder["Validated feature builder"]
-        modelService["LightGBM V2 ESI 3/4/5 model"]
+        modelService["LightGBM V3 ESI 3/4/5 model"]
         postModelRules["Post-model safety escalation"]
         decisionResult["Decision-support result assembly"]
         persistenceService["Assessment and review persistence"]
@@ -43,7 +43,7 @@ flowchart LR
     end
 
     subgraph datastore ["Persistence and validated artifacts"]
-        modelRegistry["LightGBM V2 model registry"]
+        modelRegistry["LightGBM V3 model registry"]
         clinicalDatabase["SQLite local or PostgreSQL deployment database"]
         auditTrail["Audit trail records"]
         pdfFiles["Generated PDF report files"]
@@ -97,6 +97,14 @@ The diagram shows deliberate review gates rather than automatic chaining. Record
 
 The React + Vite application provides structured intake, optional browser recording and local playback, editable transcript and NLP-review panels, assessment detail, dashboard, audit, and report views. API calls are explicit user actions. Real assessment state is loaded from FastAPI; browser storage is not the clinical source of truth.
 
+## Mobile App
+
+The same React build is packaged for iOS and Android with Capacitor rather than
+maintained as a separate native codebase — the client subgraph above is
+unchanged, just loaded inside a native WebView shell instead of a browser tab.
+See [`docs/mobile.md`](../mobile.md) for the packaging workflow and the
+backend-URL/CORS considerations specific to a native shell.
+
 ## FastAPI Backend
 
 FastAPI owns request validation, speech and NLP routes, feature preparation, model execution, safety-rule handling, persistence, review actions, audit access, and PDF generation. Typed schemas keep the frontend contract stable, including review-required and decision-support disclaimers.
@@ -113,7 +121,7 @@ Azure credentials remain backend-only in `AZURE_SPEECH_KEY` and `AZURE_SPEECH_RE
 
 ## LightGBM Model Registry
 
-The backend model loader reads the validated LightGBM V2 artifacts from `model_registry/esi_345_lightgbm_v2/`. The classifier scope is ESI 3, 4, and 5. Feature schema, preprocessing artifacts, class mapping, threshold configuration, model metadata, and the trained model are loaded through the registry rather than owned by the frontend.
+The backend model loader reads the validated LightGBM V3 artifacts from `model_registry/esi_345_lightgbm_v3/`. The classifier scope is ESI 3, 4, and 5. Feature schema, preprocessing artifacts, class mapping, threshold configuration, model metadata, and the trained model are loaded through the registry rather than owned by the frontend.
 
 ## Safety Rules
 

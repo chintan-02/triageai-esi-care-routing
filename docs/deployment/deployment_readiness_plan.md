@@ -13,7 +13,7 @@ React Frontend
     ↓
 FastAPI Backend
     ↓
-LightGBM V2 Model Registry
+LightGBM V3 Model Registry
     ↓
 SQLite Demo Database
     ↓

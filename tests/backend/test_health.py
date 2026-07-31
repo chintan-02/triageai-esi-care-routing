@@ -31,9 +31,9 @@ def test_readiness_check_returns_stable_success_shape() -> None:
         assert response.status_code == 200
         assert body["database"] == "connected"
         assert body["model_loaded"] is True
-        assert body["model_version"] == "lightgbm_v2_weight_threshold_esi345"
+        assert body["model_version"] == "lightgbm_v3_enhanced_eval"
         assert body["model_source"] == "final_registry"
-        assert body["selected_calibration_method"] == "raw_lightgbm_probability"
+        assert body["selected_calibration_method"] == "isotonic_calibrated_probability"
         assert body["threshold_config_loaded"] is True
         assert body["feature_count"] == 273
         assert body["class_order"] == ["ESI_3", "ESI_4", "ESI_5"]

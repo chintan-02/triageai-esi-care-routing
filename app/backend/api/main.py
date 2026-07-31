@@ -34,7 +34,12 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        # Capacitor native app shells: iOS WKWebView uses the capacitor://
+        # scheme, Android uses an https://localhost virtual host.
+        "capacitor://localhost",
+        "https://localhost",
     ],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

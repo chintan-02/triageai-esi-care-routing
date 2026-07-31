@@ -21,13 +21,14 @@ selected vitals, arrival context, and lightweight text-derived flags.
 
 ## Evaluation
 
-Verified metrics for the saved artifact family:
+Verified metrics for the saved artifact family (LightGBM V3 Enhanced,
+`model_registry/esi_345_lightgbm_v3/reports/lightgbm_v3_test_metrics.json`):
 
-- Accuracy: 78.35%
-- Macro F1: 70.42%
-- Weighted F1: 78.91%
-- ESI 5 F1: 54.78%
-- ESI 3 to ESI 5 safety error: 0.71%
+- Accuracy: 78.52%
+- Macro F1: 70.35%
+- Weighted F1: 78.99%
+- ESI 5 F1: 54.16%
+- ESI 3 to ESI 5 safety error: 0.57%
 
 ## Leakage Prevention
 

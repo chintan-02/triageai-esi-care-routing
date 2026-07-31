@@ -49,7 +49,7 @@ workflow. It does not store unnecessary identifying information.
 `POST /predict` creates a patient and assessment, then runs the model-aware
 prediction flow:
 
-`PatientIntakeRequest -> feature_builder -> LightGBM V2 booster text model -> thresholds -> safety_rules -> explanation -> DB prediction record`
+`PatientIntakeRequest -> feature_builder -> LightGBM V3 booster text model -> thresholds -> safety_rules -> explanation -> DB prediction record`
 
 If required artifacts are missing or invalid, the prediction service returns the
 safe placeholder response and stores placeholder prediction metadata. If
@@ -73,7 +73,7 @@ No frontend UI is implemented in Phase 3.
 ## ML Pipeline
 
 Training stays outside FastAPI in `ml/training` and notebooks. The backend uses
-`model_registry/esi_345_lightgbm_v2` as the final runtime source of truth:
+`model_registry/esi_345_lightgbm_v3` as the final runtime source of truth:
 
 - `esi_345_lightgbm_v2_model.txt`
 - `esi_345_lightgbm_v2_preprocessing_artifacts.joblib`
@@ -82,8 +82,13 @@ Training stays outside FastAPI in `ml/training` and notebooks. The backend uses
 - `esi_345_deployment_config.json`
 - `esi_345_label_mapping.json`
 
-The selected model is LightGBM V2 Weight + Threshold
-(`lightgbm_v2_weight_threshold_esi345`). The backup registry folder and legacy
+(The artifact filenames keep the `esi_345_lightgbm_v2_*` prefix even inside the
+`v3` registry folder — that reflects how the upstream export was produced, not
+a stale copy. `esi_345_deployment_config.json` is what declares
+`model_version: lightgbm_v3_enhanced_eval`.)
+
+The selected model is LightGBM V3 Enhanced (`lightgbm_v3_enhanced_eval`). The
+prior `esi_345_lightgbm_v2` registry, the backup registry folder, and legacy
 `model_artifacts/` files are not used as the primary runtime source. Missing
 runtime support never crashes startup or `/predict`; it produces a clear
 placeholder response with `model_loaded: false`.

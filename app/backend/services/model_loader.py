@@ -98,12 +98,15 @@ def _registry_relative_path(
     return Path(fallback_path)
 
 
-def _feature_schema_from_registry_payload(payload: Any) -> dict[str, Any]:
+def _feature_schema_from_registry_payload(
+    payload: Any,
+    registry_dir: Path | str = "",
+) -> dict[str, Any]:
     if isinstance(payload, list):
         return {
             "features": [str(feature) for feature in payload],
             "feature_count": len(payload),
-            "source": "model_registry/esi_345_lightgbm_v2",
+            "source": str(registry_dir),
         }
     if isinstance(payload, dict):
         return payload
@@ -286,7 +289,8 @@ def load_model_bundle(app_settings: Any = settings) -> ModelBundle:
     try:
         thresholds = _normalized_thresholds(load_json_file(required_paths["thresholds"]))
         feature_schema = _feature_schema_from_registry_payload(
-            json.loads(required_paths["feature_schema"].read_text(encoding="utf-8"))
+            json.loads(required_paths["feature_schema"].read_text(encoding="utf-8")),
+            registry_dir,
         )
         label_mapping = load_json_file(required_paths["label_mapping"])
         class_labels = _class_labels_from(metadata, None, label_mapping)

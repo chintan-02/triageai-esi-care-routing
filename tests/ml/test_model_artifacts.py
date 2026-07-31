@@ -5,7 +5,7 @@ from app.backend.core.config import settings
 from app.backend.services.model_loader import load_model_bundle
 from ml.inference.validate_artifacts import validate_artifacts
 
-MODEL_REGISTRY_DIR = Path("model_registry/esi_345_lightgbm_v2")
+MODEL_REGISTRY_DIR = Path("model_registry/esi_345_lightgbm_v3")
 FORBIDDEN_BACKUP_DIR = Path("model_registry/esi_345_lightgbm_v2_backup_before_final_verdict")
 
 
@@ -46,13 +46,13 @@ def test_lightgbm_registry_bundle_loads_final_contract() -> None:
     assert Path(settings.PREPROCESSOR_PATH).name == (
         "esi_345_lightgbm_v2_preprocessing_artifacts.joblib"
     )
-    assert bundle.model_version == "lightgbm_v2_weight_threshold_esi345"
-    assert bundle.model_name == "LightGBM V2 Weight + Threshold"
+    assert bundle.model_version == "lightgbm_v3_enhanced_eval"
+    assert bundle.model_name == "LightGBM V3 Enhanced"
     assert bundle.model_source == "final_registry"
-    assert bundle.selected_calibration_method == "raw_lightgbm_probability"
+    assert bundle.selected_calibration_method == "isotonic_calibrated_probability"
     assert bundle.is_placeholder is False
     assert bundle.class_labels == ["ESI_3", "ESI_4", "ESI_5"]
-    assert bundle.thresholds and bundle.thresholds["esi5_threshold"] == 0.60
+    assert bundle.thresholds and bundle.thresholds["esi5_threshold"] == 0.50
     assert bundle.feature_schema and bundle.feature_schema["feature_count"] == 273
     assert bundle.feature_list and len(bundle.feature_list) == 273
     assert bundle.threshold_config is bundle.thresholds
@@ -83,9 +83,9 @@ def test_thresholds_match_v2_staging_config() -> None:
     with Path(settings.THRESHOLDS_PATH).open() as file:
         thresholds = json.load(file)
 
-    assert thresholds["model_version"] == "lightgbm_v2_weight_threshold_esi345"
-    assert thresholds["deployment_threshold"] == 0.60
-    assert thresholds["deploy_calibrated_probabilities"] is False
+    assert thresholds["model_version"] == "lightgbm_v3_enhanced_eval"
+    assert thresholds["deployment_threshold"] == 0.50
+    assert thresholds["deploy_calibrated_probabilities"] is True
 
 
 def test_metadata_declares_lightgbm_booster_text() -> None:
@@ -93,7 +93,7 @@ def test_metadata_declares_lightgbm_booster_text() -> None:
         metadata = json.load(file)
 
     assert metadata["model_file"] == "esi_345_lightgbm_v2_model.txt"
-    assert metadata["model_version"] == "lightgbm_v2_weight_threshold_esi345"
+    assert metadata["model_version"] == "lightgbm_v3_enhanced_eval"
     assert metadata["preprocessing_artifacts_file"] == (
         "esi_345_lightgbm_v2_preprocessing_artifacts.joblib"
     )
@@ -115,5 +115,5 @@ def test_metadata_json_loads_model_version() -> None:
     with Path(settings.LABEL_MAPPING_PATH).open() as file:
         label_mapping = json.load(file)
 
-    assert metadata["model_version"] == "lightgbm_v2_weight_threshold_esi345"
+    assert metadata["model_version"] == "lightgbm_v3_enhanced_eval"
     assert label_mapping["class_names"] == ["ESI 3", "ESI 4", "ESI 5"]

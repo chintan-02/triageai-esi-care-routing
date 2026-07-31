@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/Frontend-React_+_TypeScript-20232A?style=flat-square&logo=react&logoColor=61DAFB)
-![LightGBM](https://img.shields.io/badge/Model-LightGBM_V2-02569B?style=flat-square)
+![LightGBM](https://img.shields.io/badge/Model-LightGBM_V3-02569B?style=flat-square)
 ![Testing](https://img.shields.io/badge/Testing-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Active_Development-F59E0B?style=flat-square)
 [![CI](https://github.com/chintan-02/triageai-esi-care-routing/actions/workflows/ci.yml/badge.svg)](https://github.com/chintan-02/triageai-esi-care-routing/actions/workflows/ci.yml)
@@ -26,7 +26,7 @@
 ## Project Status
 
 - React + FastAPI migration is completed for local development and demonstration workflows.
-- The final LightGBM V2 ESI 3/4/5 model registry is integrated through the backend.
+- The final LightGBM V3 ESI 3/4/5 model registry is integrated through the backend.
 - The backend and database are the source of truth for assessments, predictions, reviews, audit events, dashboard data, and official PDF reports.
 - The React frontend is connected to real FastAPI endpoints by default.
 - A backend **Clinical Intake NLP Safety Layer** is implemented through `POST /nlp/extract-intake`.
@@ -69,7 +69,7 @@ The system is positioned as **clinical workflow decision support**, not diagnosi
 - Returns source-text evidence for extracted values rather than presenting unsupported fields as verified truth.
 - Identifies configured safety cues and missing vital-sign information.
 - Calls the FastAPI backend `POST /predict` endpoint to create real backend assessments.
-- Runs the final LightGBM V2 ESI 3/4/5 prediction path through the backend model registry.
+- Runs the final LightGBM V3 ESI 3/4/5 prediction path through the backend model registry.
 - Applies transparent safety-rule escalation for high-risk intake signals.
 - Supports human clinician accept, override, and needs-review actions.
 - Displays assessment queue, assessment detail, command center, reports, audit trail, model monitoring, and settings pages.
@@ -97,7 +97,7 @@ FastAPI Backend
                     ↓
 Clinical Input Validation + Feature Builder
                     ↓
-LightGBM V2 ESI 3/4/5 Model Registry
+LightGBM V3 ESI 3/4/5 Model Registry
                     ↓
 Safety Rule Escalation Layer
                     ↓
@@ -263,37 +263,37 @@ The NLP layer:
 
 | Field | Value |
 |---|---|
-| Model | LightGBM V2 Weight + Threshold |
+| Model | LightGBM V3 Enhanced |
 | Task | ESI 3/4/5 classification |
 | Model source | `final_registry` |
-| Model version | `lightgbm_v2_weight_threshold_esi345` |
-| Registry path | `model_registry/esi_345_lightgbm_v2/` |
+| Model version | `lightgbm_v3_enhanced_eval` |
+| Registry path | `model_registry/esi_345_lightgbm_v3/` |
 | Feature count | 273 |
 | Class order | `ESI_3`, `ESI_4`, `ESI_5` |
-| Calibration method | Raw LightGBM probability retained |
-| Threshold configuration | Loaded |
+| Calibration method | Isotonic-calibrated probability |
+| Threshold configuration | Loaded (ESI 5 decision threshold 0.50) |
 | Placeholder model | No, when validated final-registry artifacts are available |
 
 Verified metrics from:
 
 ```text
-model_registry/esi_345_lightgbm_v2/reports/lightgbm_v2_test_metrics.json
+model_registry/esi_345_lightgbm_v3/reports/lightgbm_v3_test_metrics.json
 ```
 
 | Metric | Value |
 |---|---:|
-| Accuracy | **78.32%** |
-| Macro F1 | **70.37%** |
-| Weighted F1 | **78.88%** |
-| ESI 5 F1 | **54.70%** |
-| Unsafe ESI 3-to-ESI 5 downgrade rate | **0.68%** |
+| Accuracy | **78.52%** |
+| Macro F1 | **70.35%** |
+| Weighted F1 | **78.99%** |
+| ESI 5 F1 | **54.16%** |
+| Unsafe ESI 3-to-ESI 5 downgrade rate | **0.57%** |
 
-The selected model balances overall classification quality with safety-sensitive ESI 5 behavior and downgrade-risk controls. Calibration was evaluated, but raw LightGBM probabilities were retained because calibrated challengers did not preserve all configured clinical guardrails.
+The selected model balances overall classification quality with safety-sensitive ESI 5 behavior and downgrade-risk controls. Unlike the prior V2 registry, calibration challengers for V3 preserved the configured clinical guardrails (Macro F1, ESI 5 F1, and unsafe downgrade rate), so isotonic-calibrated probabilities are deployed instead of raw LightGBM output.
 
 ### Important model artifacts
 
 ```text
-model_registry/esi_345_lightgbm_v2/
+model_registry/esi_345_lightgbm_v3/
 ├── artifact_manifest.json
 ├── esi_345_deployment_config.json
 ├── esi_345_label_mapping.json
@@ -302,15 +302,22 @@ model_registry/esi_345_lightgbm_v2/
 ├── esi_345_lightgbm_v2_preprocessing_artifacts.joblib
 ├── esi_345_lightgbm_v2_threshold_config.json
 └── reports/
-    └── lightgbm_v2_test_metrics.json
+    └── lightgbm_v3_test_metrics.json
 ```
 
-### Final source-of-truth notebook
+The artifact filenames still carry the `esi_345_lightgbm_v2_*` prefix inside the
+`esi_345_lightgbm_v3/` registry folder — that's how the V3 export was produced
+upstream, not a mistake in this repo. `esi_345_deployment_config.json` (in the
+same folder) is what actually declares `model_version: lightgbm_v3_enhanced_eval`
+and resolves each artifact path at runtime.
+
+### Final source-of-truth training script
 
 ```text
-notebooks/FINAL_SOURCE_OF_TRUTH/
-└── ESI_345_FINAL_DEPLOYMENT_LIGHTGBM_V2_SAFETY_TUNED_FINAL_VERDICT_CHECKED.ipynb
+ml/training/train_enhanced_model.py
 ```
+
+The prior V2 registry's notebook (`notebooks/FINAL_SOURCE_OF_TRUTH/ESI_345_FINAL_DEPLOYMENT_LIGHTGBM_V2_SAFETY_TUNED_FINAL_VERDICT_CHECKED.ipynb`) remains in the repo for historical reference but no longer reflects the deployed model.
 
 ---
 
@@ -517,7 +524,8 @@ docs/
 ml/
 model_artifacts/
 model_registry/
-└── esi_345_lightgbm_v2/
+├── esi_345_lightgbm_v2/
+└── esi_345_lightgbm_v3/
 notebooks/
 └── FINAL_SOURCE_OF_TRUTH/
 reports/
@@ -610,6 +618,12 @@ http://localhost:8001/docs
 streamlit run app/frontend/streamlit_app/Home.py
 ```
 
+### 9. Run the mobile app (iOS / Android)
+
+The React frontend is wrapped with Capacitor, so it runs unchanged inside a
+native iOS/Android shell. See [`docs/mobile.md`](docs/mobile.md) for setup,
+the emulator/device backend-URL gotchas, and platform-specific notes.
+
 ---
 
 ## Environment Variables
@@ -618,7 +632,7 @@ Root `.env.example` includes backend settings such as:
 
 ```env
 DATABASE_URL=sqlite:///./triageai.db
-MODEL_REGISTRY_DIR=model_registry/esi_345_lightgbm_v2
+MODEL_REGISTRY_DIR=model_registry/esi_345_lightgbm_v3
 REPORT_OUTPUT_DIR=reports/generated
 ```
 
@@ -714,7 +728,7 @@ Current coverage includes:
 2. Test free-text extraction through `POST /nlp/extract-intake`.
 3. Review the extracted values, evidence, safety cues, and missing fields.
 4. Start the React frontend on port `5173`.
-5. Confirm the top bar shows backend connected and LightGBM V2 available.
+5. Confirm the top bar shows backend connected and LightGBM V3 available.
 6. Create a new assessment through New Intake.
 7. Review the model prediction, safety escalation, confidence, latency, and probability display.
 8. Accept, override, or mark the assessment for further review.
@@ -792,7 +806,7 @@ This project demonstrates practical experience with:
 
 ## Accuracy and Honesty
 
-All model metrics listed in this README come from the final selected LightGBM V2 evaluation artifacts.
+All model metrics listed in this README come from the final selected LightGBM V3 evaluation artifacts.
 
 The project avoids unsupported clinical and technical claims. It treats human review, safety escalation, auditability, uncertainty through missing-information reporting, and transparent limitations as core system requirements.
 
@@ -892,6 +906,6 @@ See: `docs/deployment/deployment_readiness_plan.md`
 
 ## System Architecture
 
-TriageAI connects the React intake experience, optional Azure Speech-to-Text path, review-first clinical NLP, FastAPI services, the LightGBM V2 ESI 3/4/5 registry, safety escalation, clinician review, persistence, audit history, and PDF reporting. Every AI-assisted stage remains decision support only and requires clinician review.
+TriageAI connects the React intake experience, optional Azure Speech-to-Text path, review-first clinical NLP, FastAPI services, the LightGBM V3 ESI 3/4/5 registry, safety escalation, clinician review, persistence, audit history, and PDF reporting. Every AI-assisted stage remains decision support only and requires clinician review.
 
 See the [full system architecture and workflow](docs/architecture/triageai_system_architecture.md), including the Mermaid diagram and deployment boundaries.
