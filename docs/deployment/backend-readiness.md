@@ -169,6 +169,13 @@ these test settings at staging/production. The PostgreSQL CI job provisions a
 PostgreSQL 17 service, runs versioned migration checks, then runs backend tests
 with PostgreSQL. A skipped local PostgreSQL test is not PostgreSQL verification.
 
+## Cloud preparation
+
+See [private staging rollout](cloud-rollout.md) for the guarded manual release
+workflow, immutable images, identity/secret boundaries, Netlify configuration,
+bootstrap, cost decisions and rollback. No cloud resources are provisioned by
+that preparation.
+
 ## Gates before public launch
 
 1. Run the PostgreSQL CI job and verify the Docker image on its target platform.

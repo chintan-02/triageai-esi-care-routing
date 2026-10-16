@@ -99,8 +99,11 @@ jobs:
       - name: Run frontend tests
         run: npm test
 
-      - name: Build frontend
-        run: npm run build
+      - name: Build and validate Netlify frontend
+        env:
+          VITE_API_BASE_URL: https://api.example.invalid
+          VITE_USE_MOCK_API: "false"
+        run: node scripts/build-netlify.mjs
 
   test:
     name: test

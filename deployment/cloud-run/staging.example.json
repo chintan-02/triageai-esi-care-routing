@@ -1,0 +1,17 @@
+{
+  "project": "REPLACE_PROJECT_ID",
+  "region": "northamerica-northeast1",
+  "service": "triageai-staging",
+  "artifact_repository": "triageai",
+  "runtime_account": "triageai-runtime@REPLACE_PROJECT_ID.iam.gserviceaccount.com",
+  "smoke_account": "triageai-smoke@REPLACE_PROJECT_ID.iam.gserviceaccount.com",
+  "migration_account": "triageai-migrate@REPLACE_PROJECT_ID.iam.gserviceaccount.com",
+  "cleanup_account": "triageai-cleanup@REPLACE_PROJECT_ID.iam.gserviceaccount.com",
+  "cloud_sql_instance": "",
+  "frontend_origin": "https://REPLACE_SITE.netlify.app",
+  "report_bucket": "REPLACE_PRIVATE_BUCKET",
+  "runtime_database_secret": "triageai-staging-runtime-database:1",
+  "migration_database_secret": "triageai-staging-migration-database:1",
+  "cleanup_database_secret": "triageai-staging-cleanup-database:1",
+  "rate_limit_secret": "triageai-staging-rate-limit:1"
+}

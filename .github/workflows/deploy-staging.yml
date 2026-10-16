@@ -1,0 +1,83 @@
+name: Deploy private staging
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: triageai-staging-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main' && vars.CLOUD_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_SHA: ${{ github.sha }}
+      RELEASE_REPO: ${{ github.repository }}
+      CLOUD_CONFIG: ${{ vars.CLOUD_RUN_STAGING_CONFIG }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require passing CI on this exact main commit
+        run: |
+          gh api "repos/$RELEASE_REPO/actions/workflows/ci.yml/runs?head_sha=$RELEASE_SHA&event=push&status=completed" > /tmp/ci-runs.json
+          python - <<'PY'
+          import json, os
+          runs = json.load(open('/tmp/ci-runs.json'))['workflow_runs']
+          if not any(r['head_sha'] == os.environ['RELEASE_SHA'] and r['conclusion'] == 'success' for r in runs):
+              raise SystemExit('Run successful CI on this exact main commit before deployment.')
+          PY
+      - name: Validate staging configuration
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.cloud_run_release import validate
+          config = json.loads(os.environ['CLOUD_CONFIG'])
+          image = f"{config['region']}-docker.pkg.dev/{config['project']}/{config['artifact_repository']}/backend"
+          validate(config, image + '@sha256:' + '0' * 64)
+          Path('/tmp/staging-config.json').write_text(json.dumps(config))
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f"IMAGE_REPOSITORY={image}\nREGISTRY_HOST={config['region']}-docker.pkg.dev\n")
+          PY
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Build and push AMD64 backend
+        run: |
+          gcloud auth configure-docker "$REGISTRY_HOST" --quiet
+          docker buildx create --use
+          docker buildx build --platform linux/amd64 --file Dockerfile.backend --tag "$IMAGE_REPOSITORY:$RELEASE_SHA" --metadata-file /tmp/image-metadata.json --push .
+          python - <<'PY'
+          import json, os, re
+          digest = json.load(open('/tmp/image-metadata.json'))['containerimage.digest']
+          if not re.fullmatch(r'sha256:[a-f0-9]{64}', digest):
+              raise SystemExit('Image build did not return a valid digest.')
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f"RELEASE_IMAGE={os.environ['IMAGE_REPOSITORY']}@{digest}\n")
+          PY
+      # Refresh federation credentials after potentially lengthy image build.
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Migrate, deploy candidate, smoke test, then promote private staging
+        run: |
+          python scripts/cloud_run_release.py --config /tmp/staging-config.json --image "$RELEASE_IMAGE" --output /tmp/release-plan --apply
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-release-${{ github.sha }}
+          path: /tmp/release-plan/
+          if-no-files-found: ignore
+          retention-days: 14

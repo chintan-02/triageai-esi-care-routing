@@ -34,3 +34,6 @@ node_modules
 **/node_modules
 dist
 **/dist
+
+# Workload Identity Federation credentials must never enter container contexts.
+gha-creds-*.json

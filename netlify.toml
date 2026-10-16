@@ -1,0 +1,14 @@
+[build]
+  base = "app/frontend/react_app"
+  command = "node scripts/build-netlify.mjs"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "24"
+  VITE_USE_MOCK_API = "false"
+
+# Provide VITE_API_BASE_URL in Netlify's build environment, never credentials.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
