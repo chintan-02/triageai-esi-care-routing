@@ -119,7 +119,9 @@ def test_smoke_uses_separate_iam_and_app_tokens_and_revokes_sessions(monkeypatch
         if path.endswith('/download'):
             return Response(b'not-a-pdf' if bad_pdf else b'%PDF-synthetic')
         if path == '/api/v1/auth/logout':
-            return Response(b'')
+            response = Response(b'')
+            response.headers = {'Content-Type': 'application/json'}
+            return response
         raise AssertionError(path)
     monkeypatch.setattr(cloud_smoke, 'urlopen', open_request)
     if bad_pdf:

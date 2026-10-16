@@ -20,6 +20,8 @@ def smoke(url, audience, identity_service_account):
                       data=json.dumps(body).encode() if body is not None else None)
         with urlopen(req, timeout=60) as response:
             data = response.read(3 * 1024 * 1024)
+            if not data:
+                return None
             return json.loads(data) if 'application/json' in response.headers.get('Content-Type', '') else data
     health = request('/health')
     ready = request('/ready')
