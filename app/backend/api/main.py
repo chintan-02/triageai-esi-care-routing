@@ -14,6 +14,7 @@ from app.backend.api.routes.predict import router as predict_router
 from app.backend.api.routes.reports import router as reports_router
 from app.backend.api.routes.speech import router as speech_router
 from app.backend.core.config import settings
+from app.backend.core.body_limits import BodySizeLimitMiddleware
 from app.backend.db.base import init_db, assert_schema_current
 
 
@@ -35,12 +36,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(BodySizeLimitMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["Retry-After"],
 )
 
 app.include_router(auth_router)

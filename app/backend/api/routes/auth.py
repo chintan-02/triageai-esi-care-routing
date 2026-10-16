@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.backend.core.config import settings
+from app.backend.core.limits import public_auth_limit, consume
 from app.backend.core.security import create_session, get_authenticated_db, password_hash, verify_password
 from app.backend.db.models import User
 from app.backend.db.session import get_db
@@ -29,18 +30,18 @@ def require_public_demo() -> None:
         raise HTTPException(403, "Public demo access is disabled")
 
 
-@router.post("/demo", response_model=SessionResponse, dependencies=[Depends(require_public_demo)])
+@router.post("/demo", response_model=SessionResponse, dependencies=[Depends(public_auth_limit), Depends(require_public_demo)])
 def demo(response: Response, db: Session = Depends(get_db)) -> SessionResponse:
-    user = User(full_name="Demo visitor", role="Doctor")
+    user = User(full_name="Demo visitor", role="Doctor", is_demo=True)
     db.add(user)
     db.flush()
     return session_response(db, user, response)
 
 
-@router.post("/register", response_model=SessionResponse, dependencies=[Depends(require_public_demo)])
+@router.post("/register", response_model=SessionResponse, dependencies=[Depends(public_auth_limit), Depends(require_public_demo)])
 def register(payload: RegisterRequest, response: Response, db: Session = Depends(get_db)) -> SessionResponse:
     # This is an educational demo account, not a verified clinician or administrator.
-    user = User(email=payload.email, full_name=payload.name, role="Doctor",
+    user = User(email=payload.email, full_name=payload.name, role="Doctor", is_demo=True,
                 password_hash=password_hash(payload.password))
     db.add(user)
     try:
@@ -51,9 +52,11 @@ def register(payload: RegisterRequest, response: Response, db: Session = Depends
     return session_response(db, user, response)
 
 
-@router.post("/login", response_model=SessionResponse)
+@router.post("/login", response_model=SessionResponse, dependencies=[Depends(public_auth_limit)])
 def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> SessionResponse:
-    user = db.scalar(select(User).where(User.email == payload.identifier.strip().lower()))
+    identifier = payload.identifier.strip().lower()
+    consume(db, "login-account", identifier, settings.LOGIN_ACCOUNT_PER_HOUR, 3600)
+    user = db.scalar(select(User).where(User.email == identifier))
     if not verify_password(payload.password, user.password_hash if user else None):
         raise HTTPException(401, "Invalid credentials")
     return session_response(db, user, response)

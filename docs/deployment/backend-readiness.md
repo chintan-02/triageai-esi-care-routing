@@ -173,11 +173,11 @@ with PostgreSQL. A skipped local PostgreSQL test is not PostgreSQL verification.
 
 1. Run the PostgreSQL CI job and verify the Docker image on its target platform.
 2. Verify private GCS upload/download with the intended runtime service account.
-3. Add shared abuse controls: session issuance/login throttles, bounded inference
-   and uploads, per-workspace resource quotas, and request limits. CORS is not an
-   abuse-control or authentication mechanism.
-4. Implement scheduled expiry cleanup and database/object retention, including
-   orphan reconciliation. Expired sessions deny access but do not delete data.
+3. Verify the implemented shared limits/quotas in staging, including trusted
+   proxy handling and edge limits. See [demo controls](demo-controls.md).
+4. Schedule and monitor the implemented dry-run/apply cleanup job. Verify real
+   bucket deletion permissions and retention behavior; handle any out-of-band
+   objects separately.
 5. Configure cloud identity, IAM, secrets, backups and a tested restore procedure.
 6. Add monitoring/alerts, measure resource requirements, and set a cost budget.
 7. Harden frontend headers/CSP; validate public HTTPS origins and browser flows.
@@ -207,3 +207,9 @@ ready or clinically validated.
 - At initial local verification, PostgreSQL CI had not been executed remotely.
   No deployment, resource provisioning, or public release was performed.
   Consult the draft pull request for subsequent CI results.
+
+
+Subsequent verification: the developer confirmed Mac browser workflows, Admin
+screens, AMD64 Docker startup, real inference, review/PDF, and persistence after
+backend restart. PostgreSQL CI passed before this controls increment. The latest
+shared-limit/retention checks must also pass on PostgreSQL before staging.

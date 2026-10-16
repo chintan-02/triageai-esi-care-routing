@@ -55,4 +55,17 @@ describe('real backend sessions', () => {
     expect(fetch.mock.calls[0][0]).toContain('/api/v1/auth/logout');
     expect(sessionHeaders()).toEqual({});
   });
+  it('shows field validation feedback without echoing rejected password values', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce(jsonResponse({ detail: [
+      { loc: ['body', 'password'], msg: 'String should have at least 12 characters', input: 'private-password' },
+    ] }, 422));
+    await expect(authApi.register({ name: 'Demo', email: 'd@example.test', password: 'short', role: 'Doctor', organization: '', unit: '' }))
+      .rejects.toThrow('password: String should have at least 12 characters');
+  });
+
+  it('shows the backend retry guidance for a rate-limited session request', async () => {
+    vi.spyOn(window, 'fetch').mockResolvedValueOnce(jsonResponse({ detail: 'Request limit reached. Please retry later.' }, 429));
+    await expect(authApi.demo()).rejects.toThrow('Request limit reached. Please retry later.');
+  });
+
 });

@@ -28,14 +28,19 @@ def _persist_pdf(db: Session, assessment, record, include_audit: bool) -> str | 
             # Keys contain only a server-generated report UUID, never a patient identifier.
             record.storage_key = report_file_name(record.id)
             record.storage_backend = settings.REPORT_STORAGE_BACKEND
-            get_report_store().put(record.storage_key, generated.read_bytes())
+            content = generated.read_bytes()
+            if len(content) > settings.MAX_REPORT_BYTES:
+                raise HTTPException(413, "Generated report exceeds the allowed size")
+            get_report_store().put(record.storage_key, content)
         record.report_status = "generated"
         record.download_url = f"/reports/{record.id}/download"
         db.commit()
-    except Exception:
+    except Exception as exc:
         db.rollback()
         record.report_status = "failed"
         db.commit()
+        if isinstance(exc, HTTPException):
+            raise
         raise HTTPException(503, "Report storage is temporarily unavailable") from None
     if record.storage_backend == "local":
         return str(Path(settings.REPORT_OUTPUT_DIR) / record.storage_key)

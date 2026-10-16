@@ -4,11 +4,13 @@ import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.backend.core.config import settings
+from app.backend.core.limits import authenticated_limits
 from app.backend.db.models import AuthSession, User
 from app.backend.db.session import get_db
 
@@ -41,6 +43,10 @@ def token_hash(token: str) -> str:
 
 
 def create_session(db: Session, user: User) -> tuple[str, datetime]:
+    if db.scalar(update(User).where(User.id == user.id, User.cleanup_pending.is_(False))
+                 .values(updated_at=datetime.now(timezone.utc)).returning(User.id)) is None:
+        db.rollback()
+        raise HTTPException(401, "Workspace is no longer available")
     token = secrets.token_urlsafe(32)
     expiry = datetime.now(timezone.utc) + timedelta(minutes=settings.SESSION_TTL_MINUTES)
     db.add(AuthSession(token_hash=token_hash(token), user_id=user.id, expires_at=expiry))
@@ -49,6 +55,7 @@ def create_session(db: Session, user: User) -> tuple[str, datetime]:
 
 
 def get_authenticated_db(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> Session:
@@ -64,7 +71,14 @@ def get_authenticated_db(
     if expiry <= datetime.now(timezone.utc):
         raise unauthorized
     user = db.get(User, session.user_id)
-    if not user:
+    if not user or user.cleanup_pending:
         raise unauthorized
-    db.info.update(owner_id=user.id, user=user, session=session)
+    user_id = user.id
+    authenticated_limits(request, db, user_id)
+    if db.scalar(update(User).where(User.id == user_id, User.cleanup_pending.is_(False))
+                 .values(updated_at=datetime.now(timezone.utc)).returning(User.id)) is None:
+        db.rollback()
+        raise unauthorized
+    db.commit()
+    db.info.update(owner_id=user_id, user=user, session=session)
     return db

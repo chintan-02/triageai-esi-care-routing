@@ -10,6 +10,7 @@ from app.backend.core.config import settings
 class ReportStore(Protocol):
     def put(self, key: str, content: bytes) -> None: ...
     def get(self, key: str) -> bytes: ...
+    def delete(self, key: str) -> None: ...
 
 
 def checked_key(key: str) -> str:
@@ -41,6 +42,10 @@ class LocalReportStore:
         return (self.root / checked_key(key)).read_bytes()
 
 
+    def delete(self, key: str) -> None:
+        (self.root / checked_key(key)).unlink(missing_ok=True)
+
+
 class GCSReportStore:
     def __init__(self, bucket: str):
         from google.cloud import storage
@@ -57,6 +62,14 @@ class GCSReportStore:
             return self.bucket.blob(checked_key(key)).download_as_bytes(timeout=30)
         except NotFound as exc:
             raise FileNotFoundError(key) from exc
+
+
+    def delete(self, key: str) -> None:
+        from google.api_core.exceptions import NotFound
+        try:
+            self.bucket.blob(checked_key(key)).delete(timeout=30)
+        except NotFound:
+            pass  # Retrying a partially completed cleanup is safe.
 
 
 @lru_cache(maxsize=4)

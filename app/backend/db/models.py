@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.backend.db.base import Base
@@ -21,6 +21,11 @@ class User(Base):
     full_name: Mapped[str | None] = mapped_column(String, nullable=True)
     role: Mapped[str] = mapped_column(String, default="clinician", nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    cleanup_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    assessment_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    report_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    review_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
@@ -160,3 +165,11 @@ class AuthSession(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class RateBucket(Base):
+    __tablename__ = "rate_buckets"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False)
+    expires_at: Mapped[int] = mapped_column(Integer, nullable=False, index=True)

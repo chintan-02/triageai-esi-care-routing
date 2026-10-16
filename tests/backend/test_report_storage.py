@@ -67,3 +67,23 @@ def test_upload_failure_never_marks_report_generated(monkeypatch):
     assert "secret upstream details" not in response.text
     with SessionLocal() as db:
         assert db.scalar(select(Report)).report_status == "failed"
+
+
+def test_report_stores_delete_idempotently_and_gcs_outage_is_not_hidden(tmp_path, monkeypatch):
+    key = f"{uuid4()}.pdf"
+    local = LocalReportStore(str(tmp_path))
+    local.put(key, b"%PDF test")
+    local.delete(key)
+    local.delete(key)
+    assert not (tmp_path / key).exists()
+    with pytest.raises(ValueError):
+        local.delete("../unrelated.pdf")
+    client = Mock()
+    monkeypatch.setattr("google.cloud.storage.Client", lambda: client)
+    gcs = GCSReportStore("private-reports")
+    blob = client.bucket.return_value.blob.return_value
+    blob.delete.side_effect = NotFound("already deleted")
+    gcs.delete(key)
+    blob.delete.side_effect = ServiceUnavailable("unavailable")
+    with pytest.raises(ServiceUnavailable):
+        gcs.delete(key)

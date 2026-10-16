@@ -271,6 +271,9 @@ export function LoginPage() {
                         <input
                           type={showAccessCode ? 'text' : 'password'}
                           value={accessCode}
+                          minLength={12}
+                          maxLength={128}
+                          required
                           onChange={(event) => setAccessCode(event.target.value)}
                           placeholder="At least 12 characters"
                           className="focus-ring min-w-0 flex-1 bg-transparent px-3 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-400"
@@ -282,7 +285,7 @@ export function LoginPage() {
                     </label>
 
                     <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-xs leading-5 text-emerald-800">
-                      <strong>Approval note:</strong> in production this should create a pending account that an Admin approves before access is granted.
+                      <strong>Demo account:</strong> access is restricted to your own synthetic assessments. This does not verify clinical credentials.
                     </div>
                   </>
                 )}

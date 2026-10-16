@@ -14,6 +14,28 @@ class Settings(BaseSettings):
     PUBLIC_DEMO_ENABLED: bool = True
     DATABASE_POOL_SIZE: int = Field(default=5, ge=1, le=20)
     DATABASE_MAX_OVERFLOW: int = Field(default=0, ge=0, le=10)
+    RATE_LIMIT_SECRET: str = "local-development-rate-limit-key"
+    AUTH_PER_MINUTE: int = Field(default=10, ge=1)
+    AUTH_GLOBAL_PER_MINUTE: int = Field(default=100, ge=1)
+    SESSION_ISSUANCE_PER_HOUR: int = Field(default=20, ge=1)
+    SESSION_ISSUANCE_GLOBAL_PER_HOUR: int = Field(default=200, ge=1)
+    LOGIN_ACCOUNT_PER_HOUR: int = Field(default=20, ge=1)
+    API_GLOBAL_PER_MINUTE: int = Field(default=1000, ge=1)
+    REPORT_DOWNLOADS_PER_MINUTE: int = Field(default=30, ge=1)
+    MAX_REPORT_BYTES: int = Field(default=2097152, ge=1024, le=10485760)
+    API_PER_MINUTE: int = Field(default=120, ge=1)
+    PREDICTIONS_PER_MINUTE: int = Field(default=10, ge=1)
+    REPORTS_PER_MINUTE: int = Field(default=5, ge=1)
+    NLP_PER_MINUTE: int = Field(default=20, ge=1)
+    SPEECH_PER_MINUTE: int = Field(default=5, ge=1)
+    EXPENSIVE_GLOBAL_PER_HOUR: int = Field(default=500, ge=1)
+    MAX_WORKSPACE_ASSESSMENTS: int = Field(default=20, ge=1)
+    MAX_WORKSPACE_REPORTS: int = Field(default=30, ge=1)
+    MAX_WORKSPACE_REVIEWS: int = Field(default=100, ge=1)
+    MAX_JSON_BYTES: int = Field(default=65536, ge=1024, le=1048576)
+    MAX_AUDIO_BYTES: int = Field(default=5242880, ge=1024, le=20971520)
+    DEMO_RETENTION_HOURS: int = Field(default=24, ge=1, le=720)
+    CLEANUP_BATCH_SIZE: int = Field(default=100, ge=1, le=1000)
     DATABASE_URL: str = "sqlite:///./triageai.db"
     MODEL_REGISTRY_DIR: str = "model_registry/esi_345_lightgbm_v2"
     MODEL_DEPLOYMENT_CONFIG: str = (
@@ -54,6 +76,8 @@ class Settings(BaseSettings):
         if self.REPORT_STORAGE_BACKEND == "gcs" and not self.REPORT_GCS_BUCKET:
             raise ValueError("REPORT_GCS_BUCKET is required for GCS report storage")
         if self.APP_ENV.lower() in {"production", "staging"}:
+            if len(self.RATE_LIMIT_SECRET) < 32 or self.RATE_LIMIT_SECRET == "local-development-rate-limit-key":
+                raise ValueError("Deployment requires a private RATE_LIMIT_SECRET of at least 32 characters")
             if self.DEBUG or self.AUTO_CREATE_TABLES:
                 raise ValueError("Deployment requires DEBUG=false and AUTO_CREATE_TABLES=false")
             if not self.DATABASE_URL.startswith("postgresql+psycopg://"):

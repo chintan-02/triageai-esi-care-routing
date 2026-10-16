@@ -7,6 +7,8 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.backend.core.limits import reserve_workspace
+from app.backend.core.config import settings
 from app.backend.db.models import (
     Assessment,
     AuditLog,
@@ -34,6 +36,7 @@ def create_patient_from_intake(db: Session, intake: PatientIntakeRequest) -> Pat
 
 
 def create_assessment(db: Session, intake: PatientIntakeRequest) -> Assessment:
+    reserve_workspace(db, "assessment")
     patient = create_patient_from_intake(db, intake)
     assessment = Assessment(
         patient_id=patient.id,
@@ -166,6 +169,7 @@ def create_clinician_review(
     db: Session,
     review_request: ClinicianReviewRequest,
 ) -> ClinicianReview:
+    reserve_workspace(db, "review")
     review = ClinicianReview(
         assessment_id=review_request.assessment_id,
         clinician_id=review_request.clinician_id,
@@ -261,9 +265,12 @@ def create_nlp_extraction_audit_log(
 
 
 def create_report_record(db: Session, report_request: ReportRequest) -> Report:
+    reserve_workspace(db, "report")
     report = Report(
         assessment_id=report_request.assessment_id,
         report_status="queued",
+        storage_key=None,
+        storage_backend=settings.REPORT_STORAGE_BACKEND,
         download_url=None,
         include_audit=report_request.include_audit,
     )

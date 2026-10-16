@@ -12,7 +12,11 @@ async function authRequest<T>(path: string, options: RequestInit = {}): Promise<
   if (!response.ok) {
     if (response.status === 401) clearSession();
     const error = await response.json().catch(() => ({}));
-    throw new Error(typeof error.detail === 'string' ? error.detail : 'Unable to authenticate. Check your details and try again.');
+    const detail = typeof error.detail === 'string' ? error.detail
+      : Array.isArray(error.detail) ? error.detail.map((item: { loc?: string[]; msg?: string }) =>
+          `${item.loc?.filter((part) => part !== 'body').join('.') || 'Field'}: ${item.msg || 'Invalid value'}`).join('; ')
+      : 'Unable to authenticate. Check your details and try again.';
+    throw new Error(detail);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

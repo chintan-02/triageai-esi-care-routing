@@ -32,6 +32,11 @@ def test_upgrade_preserves_legacy_rows_and_schema_matches_models(tmp_path, diale
     with engine.begin() as connection:
         connection.execute(text("INSERT INTO patients (id, age, created_at, updated_at) VALUES ('legacy-patient', 42, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"))
         connection.execute(text("INSERT INTO assessments (id, patient_id, chief_complaint, status, created_at, updated_at) VALUES ('legacy-assessment', 'legacy-patient', 'Synthetic case', 'pending_review', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"))
+    migrate("upgrade", "0002_sessions_storage")
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, role, created_at, updated_at) VALUES ('legacy-owner', 'Doctor', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), ('legacy-admin', 'Admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"))
+        connection.execute(text("INSERT INTO assessments (id, owner_id, patient_id, chief_complaint, status, created_at, updated_at) VALUES ('owned-legacy', 'legacy-owner', 'legacy-patient', 'Owned synthetic case', 'pending_review', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"))
+        connection.execute(text("INSERT INTO reports (id, assessment_id, report_status, include_audit, created_at) VALUES ('legacy-report', 'owned-legacy', 'queued', true, CURRENT_TIMESTAMP)"))
     migrate("upgrade", "head")
     migrate("upgrade", "head")
     migrate("check")
@@ -41,6 +46,9 @@ def test_upgrade_preserves_legacy_rows_and_schema_matches_models(tmp_path, diale
     with engine.connect() as connection:
         row = connection.execute(text("SELECT chief_complaint, owner_id FROM assessments WHERE id='legacy-assessment'")).one()
         assert row == ("Synthetic case", None)
+        quota = connection.execute(text("SELECT is_demo, assessment_count, report_count FROM users WHERE id='legacy-owner'")).one()
+        assert quota == (True, 1, 1)
+        assert connection.execute(text("SELECT is_demo FROM users WHERE id='legacy-admin'")).scalar() in (False, 0)
     migrate("downgrade", "2dc4cd53d258")
     migrate("upgrade", "head")
     migrate("check")
