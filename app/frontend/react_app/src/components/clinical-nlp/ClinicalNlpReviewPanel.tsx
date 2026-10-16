@@ -88,7 +88,7 @@ export function ClinicalNlpReviewPanel({
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/40">
+        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-xs shadow-slate-200/40">
           <h3 className="text-sm font-black text-slate-900">Extracted demographics</h3>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div>
@@ -102,7 +102,7 @@ export function ClinicalNlpReviewPanel({
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/40">
+        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-xs shadow-slate-200/40">
           <h3 className="text-sm font-black text-slate-900">Complaint</h3>
           <p className="mt-3 text-xs font-black uppercase tracking-[0.16em] text-slate-500">Chief complaint</p>
           <p className="mt-1.5 text-base font-bold leading-6 text-slate-900">
@@ -110,7 +110,7 @@ export function ClinicalNlpReviewPanel({
           </p>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/40">
+        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-xs shadow-slate-200/40">
           <h3 className="text-sm font-black text-slate-900">Key vitals</h3>
           <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-3">
             {vitalItems.map((vital) => (
@@ -122,7 +122,7 @@ export function ClinicalNlpReviewPanel({
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/40">
+        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-xs shadow-slate-200/40">
           <h3 className="text-sm font-black text-slate-900">Symptoms ({extraction.symptoms.length})</h3>
           <div className="mt-3 flex flex-wrap gap-2">
             {extraction.symptoms.length ? (
@@ -208,7 +208,7 @@ export function ClinicalNlpReviewPanel({
           checked={isReviewed}
           disabled={isStale}
           onChange={(event) => onReviewedChange(event.target.checked)}
-          className="mt-1 h-5 w-5 rounded border-slate-300"
+          className="mt-1 h-5 w-5 rounded-sm border-slate-300"
         />
         <span>
           <span className="flex items-center gap-2 font-black">

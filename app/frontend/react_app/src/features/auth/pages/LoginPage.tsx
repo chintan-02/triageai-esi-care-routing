@@ -132,7 +132,7 @@ export function LoginPage() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/8 p-5 shadow-[0_24px_70px_rgba(0,0,0,0.18)] backdrop-blur">
+            <div className="rounded-3xl border border-white/10 bg-white/8 p-5 shadow-[0_24px_70px_rgba(0,0,0,0.18)] backdrop-blur-sm">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 rounded-2xl bg-emerald-400/10 p-2 text-emerald-200 ring-1 ring-emerald-300/20">
                   <ShieldCheck size={19} />
@@ -292,7 +292,7 @@ export function LoginPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="focus-ring flex w-full items-center justify-center gap-2 rounded-2xl bg-clinical-navy px-4 py-3.5 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinical-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="focus-ring flex w-full items-center justify-center gap-2 rounded-2xl bg-clinical-navy px-4 py-3.5 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:bg-slate-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-clinical-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : mode === 'sign-in' ? <LogIn size={18} /> : <UserPlus size={18} />}
                   {mode === 'sign-in' ? 'Sign in' : 'Create account'}

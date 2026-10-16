@@ -41,7 +41,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-6 rounded-2xl border border-white/10 bg-white/10 p-3.5 backdrop-blur-sm">
+      <div className="mt-6 rounded-2xl border border-white/10 bg-white/10 p-3.5 backdrop-blur-xs">
         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-100/70">Safety mode</p>
         <p className="mt-1.5 text-sm font-semibold">Human-in-the-loop enabled</p>
         <p className="mt-1.5 text-xs leading-5 text-slate-300">Structured intake and clinician review remain in the workflow before final use.</p>

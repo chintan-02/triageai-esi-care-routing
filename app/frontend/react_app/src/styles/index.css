@@ -1,6 +1,6 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "./tailwind-compat.css";
+@config "../../tailwind.config.js";
 
 :root {
   color-scheme: light;
@@ -53,7 +53,7 @@ body {
 }
 
 .focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-clinical-blue/50 focus:ring-offset-2 focus:ring-offset-white;
+  @apply focus:outline-hidden focus:ring-2 focus:ring-clinical-blue/50 focus:ring-offset-2 focus:ring-offset-white;
 }
 
 .card-gradient {

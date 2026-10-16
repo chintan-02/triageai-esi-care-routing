@@ -103,7 +103,7 @@ export function VitalSliderPanel({
                 ? 'Clinician entered'
                 : 'Not entered';
           return (
-            <section key={control.key} className={`flex h-full flex-col rounded-[1.2rem] border bg-white p-2.5 shadow-sm ${vitalFlagTone(flag)}`}>
+            <section key={control.key} className={`flex h-full flex-col rounded-[1.2rem] border bg-white p-2.5 shadow-xs ${vitalFlagTone(flag)}`}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">{control.label}</p>
@@ -130,7 +130,7 @@ export function VitalSliderPanel({
                   />
                   {thumbPosition === null ? null : (
                     <div
-                      className="absolute top-1/2 h-4 w-1 -translate-y-1/2 rounded-full bg-clinical-blue shadow"
+                      className="absolute top-1/2 h-4 w-1 -translate-y-1/2 rounded-full bg-clinical-blue shadow-sm"
                       style={{ left: `calc(${thumbPosition}% - 2px)` }}
                       aria-hidden="true"
                     />

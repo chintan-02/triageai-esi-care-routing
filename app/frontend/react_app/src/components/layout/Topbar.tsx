@@ -44,12 +44,12 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
           <Menu size={20} />
         </button>
 
-        <form onSubmit={submitSearch} className="hidden items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500 shadow-sm md:flex md:w-[min(30rem,100%)]">
+        <form onSubmit={submitSearch} className="hidden items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500 shadow-xs md:flex md:w-[min(30rem,100%)]">
           <Search size={18} />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="min-w-0 flex-1 bg-transparent font-medium outline-none placeholder:text-slate-400"
+            className="min-w-0 flex-1 bg-transparent font-medium outline-hidden placeholder:text-slate-400"
             placeholder="Search patient, MRN, complaint, assessment, report..."
           />
         </form>
@@ -65,14 +65,14 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
               <span className="font-bold tracking-[0.08em] opacity-80">{statusDetail}</span>
             </span>
           </div>
-          <button className="focus-ring flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50" aria-label="Notifications">
+          <button className="focus-ring flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-xs hover:bg-slate-50" aria-label="Notifications">
             <Bell size={18} />
           </button>
 
           <div className="relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="focus-ring flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm hover:bg-slate-50 sm:px-3"
+              className="focus-ring flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-2.5 py-2 shadow-xs hover:bg-slate-50 sm:px-3"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-clinical-navy text-sm font-black text-white">{user?.initials ?? '—'}</div>
               <div className="hidden text-left sm:block">

@@ -242,7 +242,7 @@ export function ReportsPage() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search reports..."
-                  className="w-56 bg-transparent outline-none"
+                  className="w-56 bg-transparent outline-hidden"
                 />
               </div>
             }
@@ -255,7 +255,7 @@ export function ReportsPage() {
                 aria-pressed={statusFilter === filter.value}
                 onClick={() => setStatusFilter(filter.value)}
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition ${
-                  statusFilter === filter.value ? 'border-clinical-navy bg-clinical-navy text-white shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  statusFilter === filter.value ? 'border-clinical-navy bg-clinical-navy text-white shadow-xs' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <span>{filter.label}</span>
@@ -302,7 +302,7 @@ export function ReportsPage() {
             ) : (
               <div className="space-y-3 p-5">
                 {filtered.map((record) => (
-                  <article key={record.reportId} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-card sm:p-5">
+                  <article key={record.reportId} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-xs transition-shadow hover:shadow-card sm:p-5">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="flex min-w-0 gap-3.5">
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><FileText size={20} /></div>

@@ -124,7 +124,7 @@ export function ClinicalNlpAuditEvidenceCard({
       <div className="border-b border-blue-100 px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-700 text-white shadow-sm">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-700 text-white shadow-xs">
               <FileSearch size={21} />
             </div>
             <div>

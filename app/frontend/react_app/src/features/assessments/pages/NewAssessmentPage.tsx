@@ -640,7 +640,7 @@ export function NewAssessmentPage() {
       </div>
 
       <form onSubmit={preventImplicitSubmit} className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_300px] 2xl:gap-5">
-        <section className="flex flex-col self-start overflow-hidden rounded-[1.45rem] border border-slate-200 bg-white/95 shadow-soft backdrop-blur">
+        <section className="flex flex-col self-start overflow-hidden rounded-[1.45rem] border border-slate-200 bg-white/95 shadow-soft backdrop-blur-sm">
           <div className="shrink-0 border-b border-slate-100 px-3.5 py-2.5 sm:px-4">
             <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-1">
               {steps.map((step, index) => {
@@ -1193,7 +1193,7 @@ export function NewAssessmentPage() {
           </div>
         </section>
 
-        <aside className="flex min-h-[240px] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/95 shadow-soft backdrop-blur 2xl:sticky 2xl:top-6 2xl:self-start">
+        <aside className="flex min-h-[240px] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/95 shadow-soft backdrop-blur-sm 2xl:sticky 2xl:top-6 2xl:self-start">
           <div className="shrink-0 border-b border-slate-100 p-3">
             <h2 className="text-lg font-black text-slate-950">Live intake summary</h2>
             <p className="mt-1 text-sm text-slate-600">Patient context, vitals, and workflow status.</p>

@@ -355,7 +355,7 @@ function AuditTimelineEvent({ event }: { event: ExtendedEvent }) {
   const detailsId = `audit-details-${event.assessmentId}-${event.id}`.replace(/[^a-zA-Z0-9_-]/g, '-');
 
   return (
-    <article className="relative rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-card sm:p-5">
+    <article className="relative rounded-3xl border border-slate-200 bg-white p-4 shadow-xs transition-shadow hover:shadow-card sm:p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 gap-3.5">
           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${eventTypeTone[event.category]}`}>

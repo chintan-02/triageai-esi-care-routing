@@ -183,7 +183,7 @@ export function AssessmentsPage() {
                   setSearchParams(next, { replace: true });
                 }}
                 placeholder="Search assessments..."
-                className="w-56 bg-transparent outline-none"
+                className="w-56 bg-transparent outline-hidden"
               />
             </div>
           }
@@ -194,7 +194,7 @@ export function AssessmentsPage() {
               key={filter.value}
               onClick={() => setStatusFilter(filter.value)}
               className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition ${
-                statusFilter === filter.value ? 'border-clinical-navy bg-clinical-navy text-white shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                statusFilter === filter.value ? 'border-clinical-navy bg-clinical-navy text-white shadow-xs' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
               }`}
             >
               <span>{filter.label}</span>

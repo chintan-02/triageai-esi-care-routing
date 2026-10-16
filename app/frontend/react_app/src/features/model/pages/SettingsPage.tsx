@@ -58,8 +58,8 @@ export function SettingsPage() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
               Backend-connected data mode is the default. Use{' '}
-              <code className="rounded bg-slate-100 px-1.5 py-1 text-xs font-bold">VITE_API_BASE_URL=http://localhost:8001</code> for local FastAPI, and only set{' '}
-              <code className="rounded bg-slate-100 px-1.5 py-1 text-xs font-bold">VITE_USE_MOCK_API=true</code> for isolated UI development with synthetic records.
+              <code className="rounded-sm bg-slate-100 px-1.5 py-1 text-xs font-bold">VITE_API_BASE_URL=http://localhost:8001</code> for local FastAPI, and only set{' '}
+              <code className="rounded-sm bg-slate-100 px-1.5 py-1 text-xs font-bold">VITE_USE_MOCK_API=true</code> for isolated UI development with synthetic records.
             </div>
           </CardBody>
         </Card>
