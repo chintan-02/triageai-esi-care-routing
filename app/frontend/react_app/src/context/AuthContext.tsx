@@ -5,7 +5,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AuthUser, ClinicianRole, RegisterAccountInput } from '@/types/auth';
 import { authApi } from '@/api/authApi';
-import { USE_MOCK_AUTH, USE_MOCK_API } from '@/lib/env';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -13,9 +12,9 @@ interface AuthContextValue {
   login: (nameOrEmail: string, role: ClinicianRole, password: string) => Promise<void>;
   register: (input: RegisterAccountInput) => Promise<void>;
   logout: () => Promise<void>;
+  startDemo: () => Promise<void>;
 }
 
-const STORAGE_KEY = 'triageai.auth.user';
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -24,14 +23,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    // Retire plaintext mock accounts and unverified local profiles from older builds.
+    window.localStorage.removeItem('triageai.auth.localAccounts');
+    window.localStorage.removeItem('triageai.auth.user');
 
     async function loadSession() {
       try {
-        if (USE_MOCK_API || USE_MOCK_AUTH) {
-          const raw = window.localStorage.getItem(STORAGE_KEY);
-          if (raw && mounted) setUser(JSON.parse(raw) as AuthUser);
-          return;
-        }
         const currentUser = await authApi.me();
         if (mounted) setUser(currentUser);
       } catch {
@@ -41,35 +38,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    const expireSession = () => setUser(null);
+    window.addEventListener("triageai:session-expired", expireSession);
     void loadSession();
     return () => {
       mounted = false;
+      window.removeEventListener("triageai:session-expired", expireSession);
     };
   }, []);
 
   const login = async (nameOrEmail: string, role: ClinicianRole, password: string) => {
     const authedUser = await authApi.login(nameOrEmail, role, password);
     setUser(authedUser);
-    if (USE_MOCK_API || USE_MOCK_AUTH) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(authedUser));
-    }
   };
 
   const register = async (input: RegisterAccountInput) => {
     const authedUser = await authApi.register(input);
     setUser(authedUser);
-    if (USE_MOCK_API || USE_MOCK_AUTH) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(authedUser));
-    }
   };
 
   const logout = async () => {
-    await authApi.logout();
-    setUser(null);
-    window.localStorage.removeItem(STORAGE_KEY);
+    try { await authApi.logout(); } finally { setUser(null); }
   };
 
-  const value = useMemo(() => ({ user, isLoading, login, register, logout }), [user, isLoading]);
+  const startDemo = async () => { setUser(await authApi.demo()); };
+
+  const value = useMemo(() => ({ user, isLoading, login, register, logout, startDemo }), [user, isLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

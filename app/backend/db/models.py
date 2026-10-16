@@ -20,6 +20,7 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
     full_name: Mapped[str | None] = mapped_column(String, nullable=True)
     role: Mapped[str] = mapped_column(String, default="clinician", nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
@@ -49,6 +50,7 @@ class Assessment(Base):
     __tablename__ = "assessments"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
     patient_id: Mapped[str] = mapped_column(ForeignKey("patients.id"), nullable=False)
     chief_complaint: Mapped[str] = mapped_column(Text, nullable=False)
     symptom_duration: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -143,7 +145,18 @@ class Report(Base):
     assessment_id: Mapped[str] = mapped_column(ForeignKey("assessments.id"), nullable=False)
     report_status: Mapped[str] = mapped_column(String, nullable=False)
     download_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    storage_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    storage_backend: Mapped[str | None] = mapped_column(String, nullable=True)
     include_audit: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     assessment: Mapped[Assessment] = relationship(back_populates="reports")
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

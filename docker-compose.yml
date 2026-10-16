@@ -1,5 +1,18 @@
 services:
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: sqlite:////app/data/triageai_demo.sqlite
+    volumes:
+      - triageai_sqlite_data:/app/data
+
   backend:
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     build:
       context: .
       dockerfile: Dockerfile.backend

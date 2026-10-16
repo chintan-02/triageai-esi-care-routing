@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.backend.db import repositories
-from app.backend.db.session import get_db
+from app.backend.core.security import get_authenticated_db as get_db
 from app.backend.schemas.clinician_review import (
     ClinicianReviewRequest,
     ClinicianReviewResponse,
@@ -30,6 +30,14 @@ def submit_clinician_review(
     assessment = repositories.get_assessment_by_id(db, review.assessment_id)
     if assessment is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
+
+    if "user" in db.info:
+        principal = db.info["user"]
+        if principal.role not in {"Nurse", "Doctor"}:
+            raise HTTPException(403, "Reviewer permission required")
+        if review.action == "override" and principal.role != "Doctor":
+            raise HTTPException(403, "Doctor workflow permission required for override")
+        review = review.model_copy(update={"clinician_id": principal.id, "reviewer_role": principal.role})
 
     latest_prediction = repositories.get_latest_prediction_for_assessment(
         db,

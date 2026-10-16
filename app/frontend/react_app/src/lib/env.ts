@@ -1,7 +1,7 @@
 const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
 
 export const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API === 'true';
-export const USE_MOCK_AUTH = import.meta.env.VITE_USE_MOCK_AUTH !== 'false';
+export const USE_MOCK_AUTH = false;
 export const API_BASE_URL = rawApiBaseUrl?.trim() || 'http://localhost:8001';
 
 export interface RuntimeWarning {

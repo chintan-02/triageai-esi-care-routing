@@ -183,6 +183,7 @@ It explicitly reports missing information such as:
 
 ```bash
 curl -X POST "http://localhost:8001/nlp/extract-intake" \
+  -H "Authorization: Bearer $TRIAGEAI_DEMO_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "note_text": "62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."
@@ -386,7 +387,13 @@ It is responsible for:
 | `GET` | `/reports/{report_id}/download` | Download a generated report |
 | `POST` | `/speech/transcribe` | Review-required speech transcription with a safe unconfigured fallback |
 
-`app/backend/api/routes/auth.py` exists, but its router is not currently included in `app/backend/api/main.py`. Authentication routes are therefore not documented as live backend endpoints.
+Authentication is now provided by `/api/v1/auth/demo`, `/register`, `/login`,
+`/me`, and `/logout` (all paths share the `/api/v1/auth` prefix). Workflow APIs
+require a bearer session and enforce private assessment ownership. Public demo
+accounts cannot grant themselves administrative privileges.
+
+See [backend readiness and local startup](docs/deployment/backend-readiness.md)
+for migrations, PostgreSQL, report storage, verification, and remaining release gates.
 
 ---
 
@@ -564,9 +571,12 @@ On Windows:
 pip install -r requirements.txt
 ```
 
-### 4. Start the FastAPI backend
+### 4. Apply migrations and start the FastAPI backend
+
+Use Python 3.12 for the pinned deployment runtime.
 
 ```bash
+python -m alembic upgrade head
 python -m uvicorn app.backend.api.main:app --reload --port 8001
 ```
 
@@ -579,8 +589,12 @@ curl http://localhost:8001/ready | python -m json.tool
 
 ### 6. Test the Clinical Intake NLP endpoint
 
+First obtain a session with `POST /api/v1/auth/demo`; provide its `access_token`
+as `TRIAGEAI_DEMO_TOKEN` for this request. The frontend manages this automatically.
+
 ```bash
 curl -X POST "http://localhost:8001/nlp/extract-intake" \
+  -H "Authorization: Bearer $TRIAGEAI_DEMO_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "note_text": "62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."

@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 from app.backend.api.routes.reports import get_or_generate_assessment_report_pdf
 from app.backend.db import repositories
-from app.backend.db.session import get_db
+from app.backend.core.security import get_authenticated_db as get_db
 from app.backend.schemas.assessment import (
     AssessmentAuditEvent,
     AssessmentAuditTrailResponse,

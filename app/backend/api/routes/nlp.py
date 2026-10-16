@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from app.backend.core.security import get_authenticated_db
 
 from app.backend.schemas.nlp import (
     ClinicalIntakeExtractionRequest,
@@ -7,7 +9,7 @@ from app.backend.schemas.nlp import (
 from app.backend.services.clinical_nlp.extractor import extract_clinical_intake
 
 
-router = APIRouter(prefix="/nlp", tags=["Clinical Intake NLP"])
+router = APIRouter(prefix="/nlp", tags=["Clinical Intake NLP"], dependencies=[Depends(get_authenticated_db)])
 
 
 @router.post("/extract-intake", response_model=ClinicalIntakeExtractionResponse)
