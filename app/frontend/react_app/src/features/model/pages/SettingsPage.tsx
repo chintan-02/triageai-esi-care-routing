@@ -11,7 +11,7 @@ const checklist: Array<{ icon: LucideIcon; title: string; description: string }>
   { icon: ServerCog, title: 'Assessment endpoints', description: 'GET /assessments, GET /assessments/{id}, and POST /predict persist backend assessment data.' },
   { icon: PlugZap, title: 'Prediction service', description: 'POST /predict runs the backend LightGBM V2 decision-support workflow and stores audit-ready records.' },
   { icon: Database, title: 'Readiness and dashboard', description: 'GET /ready and GET /dashboard/summary report backend/database/model state from the source of truth.' },
-  { icon: LockKeyhole, title: 'RBAC/auth', description: 'Local auth is development-only. Production should use FastAPI JWT or secure httpOnly session auth for Admin, Doctor, and Nurse permissions.' }
+  { icon: LockKeyhole, title: 'RBAC/auth', description: 'FastAPI verifies database-backed bearer sessions and enforces workspace ownership and role permissions. Public demo accounts cannot grant themselves Admin access.' }
 ];
 
 const warningTone = {
