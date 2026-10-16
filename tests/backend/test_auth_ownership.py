@@ -63,6 +63,10 @@ def test_private_end_to_end_inference_review_report_and_dashboard():
     assert bob.post("/reports/generate", json={"assessment_id": aid}).status_code == 404
     generated = alice.post("/reports/generate", json={"assessment_id": aid})
     assert generated.status_code == 200
+    current = alice.get("/assessments").json()[0]
+    assert current["reports"][0]["report_id"] == generated.json()["report_id"]
+    assert current["reports"][0]["report_status"] == "generated"
+    assert bob.get("/assessments").json() == []
     url = generated.json()["download_url"]
     assert bob.get(url).status_code == 404
     pdf = alice.get(url)

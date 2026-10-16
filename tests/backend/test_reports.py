@@ -387,3 +387,24 @@ def test_pdf_audit_details_are_readable_not_raw_json() -> None:
     assert "Review note: Cardiac Arrest" in details
     assert "{" not in details
     assert "}" not in details
+
+
+def test_assessment_list_exposes_current_report_status_not_historical_audit():
+    from app.backend.db.session import SessionLocal
+    from app.backend.db.models import Report
+
+    aid = client.post('/predict', json=valid_intake_payload()).json()['assessment_id']
+    generated = client.post('/reports/generate', json={'assessment_id': aid}).json()
+    rid = generated['report_id']
+    with SessionLocal() as db:
+        report = db.get(Report, rid)
+        report.report_status = 'failed'
+        report.download_url = None
+        db.commit()
+    row = next(item for item in client.get('/assessments').json() if item['assessment_id'] == aid)
+    assert row['report_ids'] == [rid]
+    assert row['reports'] == [{'report_id': rid, 'report_status': 'failed', 'created_at': row['reports'][0]['created_at']}]
+    assert row['reports'][0]['created_at']
+    assert client.get(f'/reports/{rid}/download').status_code == 404
+    events = client.get(f'/assessments/{aid}/audit').json()['events']
+    assert any(event['action'] == 'report_generated' for event in events)

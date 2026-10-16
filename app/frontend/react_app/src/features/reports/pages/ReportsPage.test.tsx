@@ -47,7 +47,8 @@ describe('ReportsPage', () => {
         review_status_normalized: 'accepted',
         created_at: '2026-07-14T15:00:00Z',
         updated_at: '2026-07-14T15:05:00Z',
-        report_ids: ['REP-100']
+        report_ids: ['REP-100'],
+        reports: [{ report_id: 'REP-100', report_status: 'generated', created_at: '2026-07-14T15:06:00Z' }]
       },
       {
         assessment_id: 'AS-200',
@@ -97,6 +98,43 @@ describe('ReportsPage', () => {
     expect(within(reportCard as HTMLElement).getByRole('button', { name: 'Download PDF' })).toBeEnabled();
     expect(within(reportCard as HTMLElement).getByRole('link', { name: 'View Assessment' })).toHaveAttribute('href', '/assessments/AS-100');
     expect(screen.queryByText('No Report Patient')).not.toBeInTheDocument();
+  });
+
+  it('uses current failed/queued statuses despite old generation audit events', async () => {
+    listAssessments.mockResolvedValue([{
+      assessment_id: 'AS-100', safety_escalated: false,
+      report_ids: ['REP-100', 'REP-200', 'REP-300'],
+      reports: [
+        { report_id: 'REP-100', report_status: 'failed', created_at: '2026-07-14T15:06:00Z' },
+        { report_id: 'REP-200', report_status: 'queued', created_at: '2026-07-15T15:06:00Z' },
+        { report_id: 'REP-300', report_status: 'generated', created_at: '2026-07-13T15:06:00Z' },
+      ],
+    }]);
+    renderPage();
+    const failed = (await screen.findByText('REP-100')).closest('article') as HTMLElement;
+    const queued = screen.getByText('REP-200').closest('article') as HTMLElement;
+    const generated = screen.getByText('REP-300').closest('article') as HTMLElement;
+    expect(within(failed).getByText('failed')).toBeInTheDocument();
+    expect(within(failed).getByRole('button', { name: 'Download PDF' })).toBeDisabled();
+    expect(within(queued).getByText('queued')).toBeInTheDocument();
+    expect(within(queued).getByRole('button', { name: 'Download PDF' })).toBeDisabled();
+    expect(within(generated).getByRole('button', { name: 'Download PDF' })).toBeEnabled();
+    expect(screen.getByText('Total reports').parentElement).toHaveTextContent('3');
+    expect(screen.getByText('Generated reports', { selector: 'p' }).parentElement).toHaveTextContent('1');
+    expect(getAssessmentAudit).not.toHaveBeenCalled();
+  });
+
+  it('does not infer availability when current report metadata is absent', async () => {
+    listAssessments.mockResolvedValue([{
+      assessment_id: 'AS-100', safety_escalated: false, report_ids: ['REP-100'],
+    }]);
+    renderPage();
+    const card = (await screen.findByText('REP-100')).closest('article') as HTMLElement;
+    expect(within(card).getByText('status unavailable')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Download PDF' })).toBeDisabled();
+    expect(screen.getByText('Generated reports', { selector: 'p' }).parentElement).toHaveTextContent('0');
+    expect(screen.queryByText('Most recent report')).not.toBeInTheDocument();
+    expect(getAssessmentAudit).not.toHaveBeenCalled();
   });
 
   it('shows the report-specific empty state and assessment path', async () => {
