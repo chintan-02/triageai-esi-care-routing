@@ -14,11 +14,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { LOCAL_DEV_PASSWORD } from '@/api/authApi';
 import { roleSummary } from '@/lib/permissions';
 import type { ClinicianRole } from '@/types/auth';
 
-const roles: ClinicianRole[] = ['Nurse', 'Doctor', 'Admin'];
 type AuthMode = 'sign-in' | 'sign-up';
 
 const inputClass = 'focus-ring w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-400';
@@ -34,20 +32,20 @@ function ProductMetric({ label, value }: { label: string; value: string }) {
 }
 
 export function LoginPage() {
-  const { user, login, register } = useAuth();
+  const { user, login, register, startDemo } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [identifier, setIdentifier] = useState('');
-  const [signInRole, setSignInRole] = useState<ClinicianRole>('Nurse');
+  const signInRole: ClinicianRole = 'Doctor';
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [signUpRole, setSignUpRole] = useState<ClinicianRole>('Nurse');
+  const signUpRole: ClinicianRole = 'Doctor';
   const [accessCode, setAccessCode] = useState('');
   const [showAccessCode, setShowAccessCode] = useState(false);
 
@@ -62,7 +60,7 @@ export function LoginPage() {
 
   const submitSignIn = async () => {
     if (!identifier.trim()) {
-      setError('Enter your name or work email to continue.');
+      setError('Enter your account email to continue.');
       return;
     }
     await login(identifier, signInRole, password);
@@ -79,7 +77,7 @@ export function LoginPage() {
       role: signUpRole,
       password: accessCode
     });
-    showToast({ tone: 'success', title: 'Account created', description: `${name.trim()} now has ${signUpRole} access in local mode.` });
+    showToast({ tone: 'success', title: 'Account created', description: `${name.trim()} can now explore the educational demo.` });
     navigate('/command-center', { replace: true });
   };
 
@@ -134,7 +132,7 @@ export function LoginPage() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/8 p-5 shadow-[0_24px_70px_rgba(0,0,0,0.18)] backdrop-blur">
+            <div className="rounded-3xl border border-white/10 bg-white/8 p-5 shadow-[0_24px_70px_rgba(0,0,0,0.18)] backdrop-blur-sm">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 rounded-2xl bg-emerald-400/10 p-2 text-emerald-200 ring-1 ring-emerald-300/20">
                   <ShieldCheck size={19} />
@@ -165,9 +163,17 @@ export function LoginPage() {
             </div>
 
             <div className="mb-5 rounded-2xl border border-blue-100 bg-blue-50/80 px-4 py-3 text-xs leading-5 text-blue-900">
-              <strong>Local product mode:</strong> sign in instantly or create a local account for workflow testing. Production should use backend auth, role approval, and secure sessions.
+              <strong>Educational demo:</strong> use synthetic cases only. Sessions are isolated; reviewer actions demonstrate the workflow and do not verify clinical credentials.
             </div>
 
+            <button type="button" disabled={isSubmitting} onClick={async () => {
+              setError(''); setIsSubmitting(true);
+              try { await startDemo(); navigate('/command-center', { replace: true }); }
+              catch (err) { setError(err instanceof Error ? err.message : 'Unable to start demo.'); }
+              finally { setIsSubmitting(false); }
+            }} className="focus-ring mb-4 w-full rounded-2xl bg-clinical-navy px-4 py-3 font-bold text-white disabled:opacity-50">
+              {isSubmitting ? 'Connecting…' : 'Start a private demo session'}
+            </button>
             <form onSubmit={submit} className="rounded-[1.75rem] border border-slate-200/80 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.06)] sm:p-7">
               <div className="flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
                 <button
@@ -198,15 +204,15 @@ export function LoginPage() {
 
               <div className="mt-7">
                 <p className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-extrabold uppercase tracking-[0.14em] text-emerald-700">
-                  <BadgeCheck size={14} /> Secure clinical access
+                  <BadgeCheck size={14} /> Private demo access
                 </p>
                 <h2 className="font-display mt-4 text-2xl font-extrabold tracking-tight text-slate-950">
-                  {mode === 'sign-in' ? 'Welcome back' : 'Create local account'}
+                  {mode === 'sign-in' ? 'Welcome back' : 'Create demo account'}
                 </h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
                   {mode === 'sign-in'
-                    ? 'Access the ESI intake console using your local account or the development access code.'
-                    : 'Set up a local account profile for role-based workflow testing before backend auth is connected.'}
+                    ? 'Sign in with your demo account email and password.'
+                    : 'Create an educational demo account with a password of at least 12 characters.'}
                 </p>
               </div>
 
@@ -214,7 +220,7 @@ export function LoginPage() {
                 {mode === 'sign-in' ? (
                   <>
                     <label className={labelClass}>
-                      Name or work email
+                      Account email
                       <input
                         value={identifier}
                         onChange={(event) => setIdentifier(event.target.value)}
@@ -224,25 +230,15 @@ export function LoginPage() {
                       />
                     </label>
 
-                    <label className={labelClass}>
-                      Role for local fallback access
-                      <select value={signInRole} onChange={(event) => setSignInRole(event.target.value as ClinicianRole)} className={inputClass}>
-                        {roles.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
 
                     <label className={labelClass}>
-                      Password / local access code
+                      Password
                       <div className="flex rounded-2xl border border-slate-200 bg-white">
                         <input
                           type={showPassword ? 'text' : 'password'}
                           value={password}
                           onChange={(event) => setPassword(event.target.value)}
-                          placeholder={LOCAL_DEV_PASSWORD}
+                          placeholder="At least 12 characters"
                           className="focus-ring min-w-0 flex-1 rounded-l-2xl bg-transparent px-4 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-400"
                         />
                         <button type="button" onClick={() => setShowPassword((v) => !v)} className="flex items-center rounded-r-2xl px-3 text-slate-400 hover:text-slate-600">
@@ -252,7 +248,7 @@ export function LoginPage() {
                     </label>
 
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-                      <strong className="text-slate-800">{signInRole} access:</strong> {roleSummary(signInRole)}
+                      <strong className="text-slate-800">Demo reviewer access:</strong> {roleSummary(signInRole)}
                     </div>
                   </>
                 ) : (
@@ -263,30 +259,23 @@ export function LoginPage() {
                     </label>
 
                     <label className={labelClass}>
-                      Work email
+                      Email
                       <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="priya.nair@hospital.ca" className={inputClass} />
                     </label>
 
-                    <label className={labelClass}>
-                      Role
-                      <select value={signUpRole} onChange={(event) => setSignUpRole(event.target.value as ClinicianRole)} className={inputClass}>
-                        {roles.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
 
                     <label className={labelClass}>
-                      Local access code
+                      Password (at least 12 characters)
                       <div className="flex rounded-2xl border border-slate-200 bg-white">
                         <span className="flex items-center pl-4 text-slate-400"><LockKeyhole size={17} /></span>
                         <input
                           type={showAccessCode ? 'text' : 'password'}
                           value={accessCode}
+                          minLength={12}
+                          maxLength={128}
+                          required
                           onChange={(event) => setAccessCode(event.target.value)}
-                          placeholder={LOCAL_DEV_PASSWORD}
+                          placeholder="At least 12 characters"
                           className="focus-ring min-w-0 flex-1 bg-transparent px-3 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-400"
                         />
                         <button type="button" onClick={() => setShowAccessCode((v) => !v)} className="flex items-center rounded-r-2xl px-3 text-slate-400 hover:text-slate-600">
@@ -296,7 +285,7 @@ export function LoginPage() {
                     </label>
 
                     <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-xs leading-5 text-emerald-800">
-                      <strong>Approval note:</strong> in production this should create a pending account that an Admin approves before access is granted.
+                      <strong>Demo account:</strong> access is restricted to your own synthetic assessments. This does not verify clinical credentials.
                     </div>
                   </>
                 )}
@@ -306,7 +295,7 @@ export function LoginPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="focus-ring flex w-full items-center justify-center gap-2 rounded-2xl bg-clinical-navy px-4 py-3.5 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinical-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="focus-ring flex w-full items-center justify-center gap-2 rounded-2xl bg-clinical-navy px-4 py-3.5 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:bg-slate-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-clinical-blue focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : mode === 'sign-in' ? <LogIn size={18} /> : <UserPlus size={18} />}
                   {mode === 'sign-in' ? 'Sign in' : 'Create account'}

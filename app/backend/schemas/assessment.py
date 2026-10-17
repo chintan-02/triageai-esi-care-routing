@@ -61,6 +61,12 @@ class AssessmentAuditEvent(BaseModel):
     timestamp: datetime | None = None
 
 
+class AssessmentReportSummary(BaseModel):
+    report_id: str
+    report_status: str
+    created_at: datetime | None = None
+
+
 class AssessmentListItem(BaseModel):
     assessment_id: str
     patient_id: str | None = None
@@ -85,6 +91,7 @@ class AssessmentListItem(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     report_ids: list[str] = Field(default_factory=list)
+    reports: list[AssessmentReportSummary] = Field(default_factory=list)
 
 
 class AssessmentAuditTrailResponse(BaseModel):

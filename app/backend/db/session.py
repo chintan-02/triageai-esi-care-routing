@@ -11,7 +11,12 @@ from app.backend.core.config import settings
 def _engine_kwargs(database_url: str) -> dict[str, object]:
     if database_url.startswith("sqlite"):
         return {"connect_args": {"check_same_thread": False}}
-    return {}
+    return {
+        "pool_pre_ping": True,
+        "pool_size": settings.DATABASE_POOL_SIZE,
+        "max_overflow": settings.DATABASE_MAX_OVERFLOW,
+        "pool_timeout": 10,
+    }
 
 
 engine = create_engine(settings.DATABASE_URL, **_engine_kwargs(settings.DATABASE_URL))

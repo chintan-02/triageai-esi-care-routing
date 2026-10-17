@@ -1,19 +1,8 @@
-fastapi
-python-multipart
-azure-cognitiveservices-speech
-uvicorn[standard]
-pydantic
-pydantic-settings
-python-dotenv
+-r requirements-backend.txt
+# Legacy Streamlit UI and development/test tools.
 streamlit
 requests
-reportlab
+python-dotenv
 pypdf
-sqlalchemy
-pandas
-numpy
-scikit-learn
-joblib
-lightgbm
 pytest
 httpx2

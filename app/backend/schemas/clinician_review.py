@@ -7,7 +7,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
 class ClinicianReviewRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, str_max_length=10000)
 
     assessment_id: str
     clinician_id: str = Field(

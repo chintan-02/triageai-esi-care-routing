@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends
 
 from app.backend.db import repositories
-from app.backend.db.session import get_db
+from app.backend.core.security import get_authenticated_db as get_db
 from app.backend.schemas.dashboard import DashboardSummaryResponse
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])

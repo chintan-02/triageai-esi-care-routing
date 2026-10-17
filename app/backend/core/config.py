@@ -1,15 +1,42 @@
-from pydantic import field_validator
+from typing import Literal
+
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     APP_NAME: str = "TriageAI"
     APP_ENV: str = "development"
-    DEBUG: bool = True
+    DEBUG: bool = False
+    AUTO_CREATE_TABLES: bool = False
+    CORS_ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    SESSION_TTL_MINUTES: int = Field(default=60, ge=5, le=1440)
+    PUBLIC_DEMO_ENABLED: bool = True
+    DATABASE_POOL_SIZE: int = Field(default=5, ge=1, le=20)
+    DATABASE_MAX_OVERFLOW: int = Field(default=0, ge=0, le=10)
+    RATE_LIMIT_SECRET: str = "local-development-rate-limit-key"
+    AUTH_PER_MINUTE: int = Field(default=10, ge=1)
+    AUTH_GLOBAL_PER_MINUTE: int = Field(default=100, ge=1)
+    SESSION_ISSUANCE_PER_HOUR: int = Field(default=20, ge=1)
+    SESSION_ISSUANCE_GLOBAL_PER_HOUR: int = Field(default=200, ge=1)
+    LOGIN_ACCOUNT_PER_HOUR: int = Field(default=20, ge=1)
+    API_GLOBAL_PER_MINUTE: int = Field(default=1000, ge=1)
+    REPORT_DOWNLOADS_PER_MINUTE: int = Field(default=30, ge=1)
+    MAX_REPORT_BYTES: int = Field(default=2097152, ge=1024, le=10485760)
+    API_PER_MINUTE: int = Field(default=120, ge=1)
+    PREDICTIONS_PER_MINUTE: int = Field(default=10, ge=1)
+    REPORTS_PER_MINUTE: int = Field(default=5, ge=1)
+    NLP_PER_MINUTE: int = Field(default=20, ge=1)
+    SPEECH_PER_MINUTE: int = Field(default=5, ge=1)
+    EXPENSIVE_GLOBAL_PER_HOUR: int = Field(default=500, ge=1)
+    MAX_WORKSPACE_ASSESSMENTS: int = Field(default=20, ge=1)
+    MAX_WORKSPACE_REPORTS: int = Field(default=30, ge=1)
+    MAX_WORKSPACE_REVIEWS: int = Field(default=100, ge=1)
+    MAX_JSON_BYTES: int = Field(default=65536, ge=1024, le=1048576)
+    MAX_AUDIO_BYTES: int = Field(default=5242880, ge=1024, le=20971520)
+    DEMO_RETENTION_HOURS: int = Field(default=24, ge=1, le=720)
+    CLEANUP_BATCH_SIZE: int = Field(default=100, ge=1, le=1000)
     DATABASE_URL: str = "sqlite:///./triageai.db"
-    JWT_SECRET_KEY: str = "change-me"
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     MODEL_REGISTRY_DIR: str = "model_registry/esi_345_lightgbm_v2"
     MODEL_DEPLOYMENT_CONFIG: str = (
         "model_registry/esi_345_lightgbm_v2/esi_345_deployment_config.json"
@@ -32,6 +59,8 @@ class Settings(BaseSettings):
     )
     LABEL_MAPPING_PATH: str = "model_registry/esi_345_lightgbm_v2/esi_345_label_mapping.json"
     REPORT_OUTPUT_DIR: str = "reports/generated"
+    REPORT_STORAGE_BACKEND: Literal["local", "gcs"] = "local"
+    REPORT_GCS_BUCKET: str = ""
     AZURE_SPEECH_KEY: str = ""
     AZURE_SPEECH_REGION: str = ""
     SMTP_HOST: str = ""
@@ -41,6 +70,26 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def validate_deployment(self) -> "Settings":
+        if self.REPORT_STORAGE_BACKEND == "gcs" and not self.REPORT_GCS_BUCKET:
+            raise ValueError("REPORT_GCS_BUCKET is required for GCS report storage")
+        if self.APP_ENV.lower() in {"production", "staging"}:
+            if len(self.RATE_LIMIT_SECRET) < 32 or self.RATE_LIMIT_SECRET == "local-development-rate-limit-key":
+                raise ValueError("Deployment requires a private RATE_LIMIT_SECRET of at least 32 characters")
+            if self.DEBUG or self.AUTO_CREATE_TABLES:
+                raise ValueError("Deployment requires DEBUG=false and AUTO_CREATE_TABLES=false")
+            if not self.DATABASE_URL.startswith("postgresql+psycopg://"):
+                raise ValueError("Deployment requires PostgreSQL with the psycopg driver")
+            if self.REPORT_STORAGE_BACKEND != "gcs":
+                raise ValueError("Deployment requires durable GCS report storage")
+            if not self.CORS_ALLOWED_ORIGINS or any(
+                origin == "*" or not origin.startswith("https://")
+                for origin in self.CORS_ALLOWED_ORIGINS
+            ):
+                raise ValueError("Deployment requires explicit HTTPS frontend origins")
+        return self
 
     @field_validator("DEBUG", mode="before")
     @classmethod

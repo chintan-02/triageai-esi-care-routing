@@ -1,7 +1,7 @@
 const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
 
 export const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API === 'true';
-export const USE_MOCK_AUTH = import.meta.env.VITE_USE_MOCK_AUTH !== 'false';
+export const USE_MOCK_AUTH = false;
 export const API_BASE_URL = rawApiBaseUrl?.trim() || 'http://localhost:8001';
 
 export interface RuntimeWarning {
@@ -18,7 +18,7 @@ export function getRuntimeWarnings(): RuntimeWarning[] {
     warnings.push({
       id: 'mock-auth-with-live-api',
       title: 'Live API is using local mock authentication',
-      detail: 'Backend data remains the source of truth. For deployment, set VITE_USE_MOCK_AUTH=false and connect FastAPI JWT or secure session auth.',
+      detail: 'Backend data remains the source of truth. Keep VITE_USE_MOCK_AUTH=false to use FastAPI database-backed sessions and server-enforced permissions.',
       severity: 'warning'
     });
   }

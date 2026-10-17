@@ -2,17 +2,17 @@
 
 <div align="center">
 
-![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/Frontend-React_+_TypeScript-20232A?style=flat-square&logo=react&logoColor=61DAFB)
 ![LightGBM](https://img.shields.io/badge/Model-LightGBM_V2-02569B?style=flat-square)
 ![Testing](https://img.shields.io/badge/Testing-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
-![Status](https://img.shields.io/badge/Status-Demo_Ready-22C55E?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Live_Educational_Demo-22C55E?style=flat-square)
 [![CI](https://github.com/chintan-02/triageai-esi-care-routing/actions/workflows/ci.yml/badge.svg)](https://github.com/chintan-02/triageai-esi-care-routing/actions/workflows/ci.yml)
 
 **A review-first healthcare AI decision-support workflow for structured clinical intake, ESI care routing, safety escalation, clinician review, auditability, and PDF reporting.**
 
-[Portfolio Case Study](https://chintan-patel-ai.netlify.app/case-studies/triageai)
+[Live Demo](https://triageai-chintan-staging.netlify.app/) · [Portfolio Case Study](https://chintan-patel-ai.netlify.app/case-studies/triageai)
 
 </div>
 
@@ -25,16 +25,30 @@
 
 ## Project Status
 
-- The project is at the completed demo-freeze stage for local demonstration.
-- The React + FastAPI application is completed for local development and demonstration workflows.
-- The final LightGBM V2 ESI 3/4/5 model registry is integrated through the backend.
-- The backend and database are the source of truth for assessments, predictions, reviews, audit events, dashboard data, and official PDF reports.
-- The React frontend is connected to real FastAPI endpoints by default.
-- NLP extraction, clinician review and correction, audit evidence, and PDF evidence are completed.
-- Recorded audio is submitted through `POST /speech/transcribe`; Azure Speech is supported when configured, with a safe backend fallback when it is unavailable or unconfigured.
-- The legacy Streamlit frontend is retained under `app/frontend/streamlit_app/`.
-- SQLite is used for local development and demonstration.
-- PostgreSQL is the recommended database for professional cloud deployment.
+**Live educational demo**, verified on October 16, 2026 (America/Edmonton).
+
+- React/TypeScript frontend delivered by Netlify; non-root FastAPI container on Google Cloud Run.
+- Real 273-feature LightGBM V2 inference, explicit safety escalation, and human review.
+- Neon PostgreSQL system of record with Alembic migrations and separate migration/runtime/cleanup database roles.
+- Database-backed opaque sessions, server-enforced workflow roles and owner-scoped assessments, audit and report APIs.
+- Private Google Cloud Storage PDFs with authenticated downloads. Assessment-level generation refreshes a snapshot after review/input changes; historical report-ID downloads preserve the original PDF.
+- Shared rate limits, workspace quotas and hourly bounded cleanup of eligible demo workspaces and report objects.
+- Two HTTPS uptime checks, five operational alert policies, and verified opening/closure email delivery.
+- Private candidate smoke/regression checks and image-digest-based promotion completed. Automatic public CI/CD is not configured.
+- SQLite and the legacy Streamlit frontend remain local development options. Azure Speech is optional and only works when configured; live speech transcription is not claimed.
+
+### Try the demo
+
+1. Open [TriageAI](https://triageai-chintan-staging.netlify.app/) and choose **Start a private demo session**.
+2. Enter synthetic intake or use the example note; review and correct extracted fields before prediction.
+3. Inspect model output and safety escalation, then accept, override or request further review.
+4. Generate a PDF from the assessment after review; inspect the audit trail and log out.
+
+Use synthetic information only. The Doctor demo role enables a workflow demonstration; it does not verify professional credentials. Anonymous workspaces are temporary. Eligible inactive demo data is cleaned hourly after a 24-hour retention window, subject to active-session exclusions and batch limits. Cold starts can delay the first request.
+
+See the [live operations runbook](docs/deployment/live-demo-runbook.md),
+[monitoring setup](docs/deployment/monitoring.md), and
+[verified deployment evidence](docs/releases/cloud-demo-2026-10-17.md).
 
 ---
 
@@ -103,7 +117,7 @@ LightGBM V2 ESI 3/4/5 Model Registry
                     ↓
 Safety Rule Escalation Layer
                     ↓
-SQLite / PostgreSQL-Compatible Database
+Neon PostgreSQL (cloud) / SQLite (local)
                     ↓
 Clinician Review + Audit Trail + PDF Report
 ```
@@ -183,7 +197,9 @@ It explicitly reports missing information such as:
 
 ```bash
 curl -X POST "http://localhost:8001/nlp/extract-intake" \
+  -H "Authorization: Bearer $TRIAGEAI_DEMO_TOKEN" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TRIAGEAI_SESSION_TOKEN" \
   -d '{
     "note_text": "62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."
   }'
@@ -386,7 +402,13 @@ It is responsible for:
 | `GET` | `/reports/{report_id}/download` | Download a generated report |
 | `POST` | `/speech/transcribe` | Review-required speech transcription with a safe unconfigured fallback |
 
-`app/backend/api/routes/auth.py` exists, but its router is not currently included in `app/backend/api/main.py`. Authentication routes are therefore not documented as live backend endpoints.
+Authentication is now provided by `/api/v1/auth/demo`, `/register`, `/login`,
+`/me`, and `/logout` (all paths share the `/api/v1/auth` prefix). Workflow APIs
+require a bearer session and enforce private assessment ownership. Public demo
+accounts cannot grant themselves administrative privileges.
+
+See [backend readiness and local startup](docs/deployment/backend-readiness.md)
+for migrations, PostgreSQL, report storage, verification, and remaining release gates.
 
 ---
 
@@ -473,7 +495,7 @@ Local development uses SQLite:
 DATABASE_URL=sqlite:///./triageai.db
 ```
 
-Professional cloud deployment should use PostgreSQL.
+The live demo uses managed Neon PostgreSQL; SQLite is retained for local development.
 
 The backend and database remain the source of truth. PDF records, predictions, clinician reviews, and audit events are stored server-side.
 
@@ -548,7 +570,7 @@ cd triageai-esi-care-routing
 ### 2. Create and activate a virtual environment
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 ```
 
@@ -561,12 +583,17 @@ On Windows:
 ### 3. Install Python dependencies
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements-backend.txt
+cp .env.example .env
+python -m alembic upgrade head
 ```
 
-### 4. Start the FastAPI backend
+### 4. Apply migrations and start the FastAPI backend
+
+Use Python 3.12 for the pinned deployment runtime.
 
 ```bash
+python -m alembic upgrade head
 python -m uvicorn app.backend.api.main:app --reload --port 8001
 ```
 
@@ -577,10 +604,14 @@ curl http://localhost:8001/health
 curl http://localhost:8001/ready | python -m json.tool
 ```
 
-### 6. Test the Clinical Intake NLP endpoint
+### 6. Test the Clinical Intake NLP endpoint (authenticated)
+
+First obtain a session with `POST /api/v1/auth/demo`; provide its `access_token`
+as `TRIAGEAI_DEMO_TOKEN` for this request. The frontend manages this automatically.
 
 ```bash
 curl -X POST "http://localhost:8001/nlp/extract-intake" \
+  -H "Authorization: Bearer $TRIAGEAI_DEMO_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "note_text": "62-year-old male with chest pain and shortness of breath. HR 118, BP 92/60, O2 91%, temp 38.2."
@@ -591,7 +622,7 @@ curl -X POST "http://localhost:8001/nlp/extract-intake" \
 
 ```bash
 cd app/frontend/react_app
-npm install
+npm ci
 VITE_API_BASE_URL=http://localhost:8001 npm run dev
 ```
 
@@ -629,11 +660,10 @@ Frontend `.env.example` includes:
 
 ```env
 VITE_USE_MOCK_API=false
-VITE_USE_MOCK_AUTH=true
 VITE_API_BASE_URL=http://localhost:8001
 ```
 
-Use a PostgreSQL `DATABASE_URL` for a professional cloud deployment.
+Cloud deployments use PostgreSQL with TLS certificate verification, secret references and explicit migrations; never put database credentials in Vite variables.
 
 ---
 
@@ -711,10 +741,10 @@ Current coverage includes:
 
 ---
 
-## Final Demo-Freeze Validation
+## Historical Local Demo-Freeze Validation
 
-- Backend: 96 passing tests
-- Frontend: 14 test files and 52 passing tests
+- Historical backend baseline: 96 passing tests
+- Historical frontend baseline: 14 test files and 52 passing tests
 - React production build: passed
 - Docker Compose full-stack run: passed
 - Backend readiness: passed
@@ -723,7 +753,7 @@ Current coverage includes:
 - Model class order: `ESI_3`, `ESI_4`, `ESI_5`
 - Decision threshold: `0.60`
 
-These results validate the local demonstration workflow; they do not represent clinical validation.
+These are historical baseline results, not current suite totals. See the dated release evidence for current validation. Software tests do not represent clinical validation.
 
 ---
 
@@ -819,19 +849,15 @@ The full architecture shows the deliberate review gates from intake through clin
 - UI regression coverage
 - Final demo-freeze validation
 
-### Production-Readiness Requirements
+### Remaining Clinical / Production Requirements
+
+The demo now includes application authentication, managed PostgreSQL, private report storage, secrets and operational monitoring. Production use still needs a broader review, including staff identity lifecycle, recovery, independent staging, operational ownership and the following:
 
 - Prospective clinical validation
 - Workflow usability studies
 - Subgroup and fairness evaluation
 - Calibration and drift monitoring
-- Production authentication and RBAC
-- Managed PostgreSQL
 - Privacy and security controls
-- Secret management
-- Centralized observability
-- Managed report storage
-- Controlled cloud deployment
 - Governance and regulatory assessment
 
 ---
@@ -855,7 +881,7 @@ This project demonstrates practical experience with:
 - auditability and traceability
 - backend PDF generation
 - automated testing
-- deployment-readiness planning
+- cloud deployment, private candidate verification, rollback planning and operational alerting
 - responsible AI boundaries
 
 ---
@@ -954,7 +980,7 @@ Docker Compose defines safe demo environment values inline for local full-stack 
 
 ## Deployment Readiness
 
-TriageAI is currently ready for local Docker demonstration and deployment planning. A full production deployment would require PostgreSQL, managed secrets, persistent report storage, HTTPS, monitoring, privacy/security review, clinical validation, and organizational approval.
+TriageAI has a verified public educational demo on Netlify and Cloud Run with Neon PostgreSQL, managed secrets, private GCS reports, HTTPS and operational alerts. This is not approval for clinical production. Independent staging data, cloud backup/restore verification, clinical validation, privacy/security review and organizational approval remain outstanding.
 
 See: `docs/deployment/deployment_readiness_plan.md`
 

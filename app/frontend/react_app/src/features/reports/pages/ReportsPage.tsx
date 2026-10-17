@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, Clock3, Download, FileText, Search } from 'lucide-react';
-import { getAssessmentAudit, listAssessments } from '@/api/assessments';
+import { listAssessments } from '@/api/assessments';
 import { downloadReportPdf } from '@/api/reports';
 import { useToast } from '@/context/ToastContext';
-import type { AssessmentAuditEvent, AssessmentListItem } from '@/types/api';
+import type { AssessmentListItem } from '@/types/api';
 import type { EsiLevel, ReviewStatus } from '@/types/clinical';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
@@ -49,43 +49,22 @@ function normalizeReviewStatus(item: AssessmentListItem): ReviewStatus {
   return 'pending';
 }
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function auditPayload(event: AssessmentAuditEvent): Record<string, unknown> {
-  if (!isPlainRecord(event.details)) return {};
-  const payload = event.details.payload;
-  return isPlainRecord(payload) ? { ...event.details, ...payload } : event.details;
-}
-
-function reportEventForId(events: AssessmentAuditEvent[], reportId: string): AssessmentAuditEvent | undefined {
-  return [...events].reverse().find((event) => {
-    const action = event.action.toLowerCase();
-    return (action.includes('report') || action.includes('pdf')) && auditPayload(event).report_id === reportId;
-  });
-}
-
-function mapReportRows(item: AssessmentListItem, events: AssessmentAuditEvent[]): ReportRow[] {
-  if (!Array.isArray(item.report_ids)) return [];
-  return item.report_ids.map((reportId) => {
-    const event = reportEventForId(events, reportId);
-    const payload = event ? auditPayload(event) : {};
-    const reportStatus = typeof payload.report_status === 'string' && payload.report_status.trim()
-      ? payload.report_status.replace(/_/g, ' ')
-      : event ? 'generated' : 'status unavailable';
-    return {
-      reportId,
-      assessmentId: item.assessment_id,
-      patientName: textOrFallback(item.patient_name, '—'),
-      mrn: textOrFallback(item.mrn, '—'),
-      chiefComplaint: textOrFallback(item.chief_complaint, '—'),
-      finalEsi: isEsiLevel(item.final_esi) ? item.final_esi : null,
-      reviewStatus: normalizeReviewStatus(item),
-      generatedAt: event?.timestamp ?? event?.created_at ?? null,
-      reportStatus,
-    };
-  });
+function mapReportRows(item: AssessmentListItem): ReportRow[] {
+  // IDs remain a compatibility fallback, but audit history cannot establish current availability.
+  const reports = item.reports ?? (item.report_ids ?? []).map((report_id) => ({
+    report_id, report_status: 'status unavailable', created_at: null,
+  }));
+  return reports.map((report) => ({
+    reportId: report.report_id,
+    assessmentId: item.assessment_id,
+    patientName: textOrFallback(item.patient_name, '—'),
+    mrn: textOrFallback(item.mrn, '—'),
+    chiefComplaint: textOrFallback(item.chief_complaint, '—'),
+    finalEsi: isEsiLevel(item.final_esi) ? item.final_esi : null,
+    reviewStatus: normalizeReviewStatus(item),
+    generatedAt: report.created_at ?? null,
+    reportStatus: report.report_status?.trim().toLowerCase() || 'status unavailable',
+  }));
 }
 
 function reportStatusTone(status: string): string {
@@ -119,19 +98,7 @@ export function ReportsPage() {
     setLoadError(null);
     try {
       const loaded = await listAssessments();
-      const assessmentsWithReports = loaded.filter(
-        (item) => Array.isArray(item.report_ids) && item.report_ids.length > 0,
-      );
-      const reportGroups = await Promise.all(
-        assessmentsWithReports.map(async (item) => {
-          try {
-            const audit = await getAssessmentAudit(item.assessment_id);
-            return mapReportRows(item, audit.events);
-          } catch {
-            return mapReportRows(item, []);
-          }
-        }),
-      );
+      const reportGroups = loaded.map(mapReportRows);
       setRecords(
         reportGroups
           .flat()
@@ -187,7 +154,7 @@ export function ReportsPage() {
     const reviewed = records.filter(
       (record) => record.reviewStatus === 'accepted' || record.reviewStatus === 'overridden',
     );
-    const mostRecent = records
+    const mostRecent = generated
       .map((record) => record.generatedAt)
       .filter((value): value is string => Boolean(value))
       .sort((a, b) => +new Date(b) - +new Date(a))[0] ?? null;
@@ -233,7 +200,7 @@ export function ReportsPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Card>
           <CardHeader
-            title="Generated reports"
+            title="Report records"
             description="Review and download audit-ready PDF summaries linked to stored assessments."
             action={
               <div className="flex min-h-[42px] items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 focus-within:ring-2 focus-within:ring-clinical-blue/20">
@@ -242,7 +209,7 @@ export function ReportsPage() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search reports..."
-                  className="w-56 bg-transparent outline-none"
+                  className="w-56 bg-transparent outline-hidden"
                 />
               </div>
             }
@@ -255,7 +222,7 @@ export function ReportsPage() {
                 aria-pressed={statusFilter === filter.value}
                 onClick={() => setStatusFilter(filter.value)}
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition ${
-                  statusFilter === filter.value ? 'border-clinical-navy bg-clinical-navy text-white shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  statusFilter === filter.value ? 'border-clinical-navy bg-clinical-navy text-white shadow-xs' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <span>{filter.label}</span>
@@ -302,7 +269,7 @@ export function ReportsPage() {
             ) : (
               <div className="space-y-3 p-5">
                 {filtered.map((record) => (
-                  <article key={record.reportId} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-card sm:p-5">
+                  <article key={record.reportId} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-xs transition-shadow hover:shadow-card sm:p-5">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="flex min-w-0 gap-3.5">
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><FileText size={20} /></div>
@@ -319,7 +286,7 @@ export function ReportsPage() {
                         <Link to={`/assessments/${encodeURIComponent(record.assessmentId)}`}>
                           <Button variant="secondary">View Assessment</Button>
                         </Link>
-                        <Button onClick={() => void download(record)} disabled={downloadingId === record.reportId}>
+                        <Button onClick={() => void download(record)} disabled={downloadingId === record.reportId || record.reportStatus !== 'generated'}>
                           <Download size={15} /> {downloadingId === record.reportId ? 'Downloading...' : 'Download PDF'}
                         </Button>
                       </div>
@@ -329,7 +296,7 @@ export function ReportsPage() {
                       <div className="rounded-2xl bg-slate-50 p-3"><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Assessment ID</p><p className="font-data mt-1 text-sm font-bold text-slate-800 [overflow-wrap:anywhere]">{record.assessmentId}</p></div>
                       <div className="rounded-2xl bg-slate-50 p-3"><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Final routing</p><div className="mt-1.5">{record.finalEsi ? <EsiBadge level={record.finalEsi} /> : <span className="text-sm font-semibold text-slate-500">Not captured</span>}</div></div>
                       <div className="rounded-2xl bg-slate-50 p-3"><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Clinician review</p><div className="mt-1.5"><ReviewStatusBadge status={record.reviewStatus} /></div></div>
-                      <div className="rounded-2xl bg-slate-50 p-3"><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Generated</p><p className="mt-1 text-sm font-bold text-slate-800">{record.generatedAt ? formatDateTime(record.generatedAt) : 'Time unavailable'}</p></div>
+                      <div className="rounded-2xl bg-slate-50 p-3"><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Created</p><p className="mt-1 text-sm font-bold text-slate-800">{record.generatedAt ? formatDateTime(record.generatedAt) : 'Time unavailable'}</p></div>
                     </div>
                   </article>
                 ))}

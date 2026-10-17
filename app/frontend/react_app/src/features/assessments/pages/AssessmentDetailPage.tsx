@@ -648,7 +648,7 @@ export function AssessmentDetailPage() {
               aria-selected={isActive}
               className={`focus-ring min-w-fit flex-1 rounded-2xl px-4 py-2.5 text-sm font-bold transition ${
                 isActive
-                  ? 'bg-clinical-navy text-white shadow-sm'
+                  ? 'bg-clinical-navy text-white shadow-xs'
                   : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
               }`}
               onClick={() => setActiveTab(tab.id)}

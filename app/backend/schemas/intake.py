@@ -1,8 +1,8 @@
 """Structured patient intake request schemas."""
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class NlpEvidenceItem(BaseModel):
@@ -17,16 +17,17 @@ class NlpExtractionAudit(BaseModel):
     extracted_fields: dict[str, Any] = Field(default_factory=dict)
     safety_cues: list[str] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)
-    evidence: list[NlpEvidenceItem] = Field(default_factory=list)
+    evidence: list[NlpEvidenceItem] = Field(default_factory=list, max_length=100)
     disclaimer: str
 
 
 class PatientIntakeRequest(BaseModel):
-    patient_name: str | None = None
-    mrn: str | None = None
+    model_config = ConfigDict(str_max_length=10000)
+    patient_name: str | None = Field(default=None, max_length=128)
+    mrn: str | None = Field(default=None, max_length=64)
     patient_age: int = Field(..., ge=0, le=120)
     sex: str | None = None
-    chief_complaint: str = Field(..., min_length=3)
+    chief_complaint: str = Field(..., min_length=3, max_length=1000)
     symptom_duration: str | None = None
     pain_score: int | None = Field(default=None, ge=0, le=10)
     temperature_c: float | None = None
@@ -39,6 +40,6 @@ class PatientIntakeRequest(BaseModel):
     pregnancy: bool | None = None
     arrival_mode: str | None = None
     additional_context: str | None = None
-    risk_flags: list[str] | None = None
-    comorbidities: list[str] | None = None
+    risk_flags: list[Annotated[str, Field(max_length=128)]] | None = Field(default=None, max_length=32)
+    comorbidities: list[Annotated[str, Field(max_length=128)]] | None = Field(default=None, max_length=32)
     nlp_extraction_audit: NlpExtractionAudit | None = None

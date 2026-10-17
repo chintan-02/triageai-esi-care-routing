@@ -7,6 +7,8 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.backend.core.limits import reserve_workspace
+from app.backend.core.config import settings
 from app.backend.db.models import (
     Assessment,
     AuditLog,
@@ -34,9 +36,11 @@ def create_patient_from_intake(db: Session, intake: PatientIntakeRequest) -> Pat
 
 
 def create_assessment(db: Session, intake: PatientIntakeRequest) -> Assessment:
+    reserve_workspace(db, "assessment")
     patient = create_patient_from_intake(db, intake)
     assessment = Assessment(
         patient_id=patient.id,
+        owner_id=db.info.get("owner_id"),
         chief_complaint=intake.chief_complaint,
         symptom_duration=intake.symptom_duration,
         pain_score=intake.pain_score,
@@ -68,12 +72,20 @@ def create_assessment(db: Session, intake: PatientIntakeRequest) -> Assessment:
 
 
 def get_assessment_by_id(db: Session, assessment_id: str) -> Assessment | None:
-    return db.get(Assessment, assessment_id)
+    assessment = db.get(Assessment, assessment_id)
+    if assessment is not None and "owner_id" in db.info and assessment.owner_id != db.info["owner_id"]:
+        return None
+    return assessment
+
+
+def _owned(db: Session):
+    return Assessment.owner_id == db.info["owner_id"] if "owner_id" in db.info else True
 
 
 def list_recent_assessments(db: Session, limit: int = 10) -> list[Assessment]:
     statement = (
         select(Assessment)
+        .where(_owned(db))
         .order_by(Assessment.created_at.desc())
         .limit(limit)
     )
@@ -81,7 +93,7 @@ def list_recent_assessments(db: Session, limit: int = 10) -> list[Assessment]:
 
 
 def list_assessments(db: Session) -> list[Assessment]:
-    statement = select(Assessment).order_by(Assessment.created_at.desc())
+    statement = select(Assessment).where(_owned(db)).order_by(Assessment.created_at.desc())
     return list(db.scalars(statement).all())
 
 
@@ -157,6 +169,7 @@ def create_clinician_review(
     db: Session,
     review_request: ClinicianReviewRequest,
 ) -> ClinicianReview:
+    reserve_workspace(db, "review")
     review = ClinicianReview(
         assessment_id=review_request.assessment_id,
         clinician_id=review_request.clinician_id,
@@ -245,16 +258,19 @@ def create_nlp_extraction_audit_log(
     return create_audit_log(
         db=db,
         assessment_id=assessment_id,
-        actor_id="clinical_nlp_review_ui",
+        actor_id=db.info.get("owner_id") or "clinical_nlp_review_ui",
         action="nlp_extraction_reviewed",
         details=details,
     )
 
 
 def create_report_record(db: Session, report_request: ReportRequest) -> Report:
+    reserve_workspace(db, "report")
     report = Report(
         assessment_id=report_request.assessment_id,
         report_status="queued",
+        storage_key=None,
+        storage_backend=settings.REPORT_STORAGE_BACKEND,
         download_url=None,
         include_audit=report_request.include_audit,
     )
@@ -282,7 +298,10 @@ def update_report_record(
 
 
 def get_report_by_id(db: Session, report_id: str) -> Report | None:
-    return db.get(Report, report_id)
+    report = db.get(Report, report_id)
+    if report is not None and get_assessment_by_id(db, report.assessment_id) is None:
+        return None
+    return report
 
 
 def list_reports_for_assessment(db: Session, assessment_id: str) -> list[Report]:
@@ -340,11 +359,12 @@ def _review_status_from_assessment(
 
 
 def get_dashboard_summary(db: Session) -> dict[str, Any]:
-    total_assessments = db.scalar(select(func.count()).select_from(Assessment)) or 0
+    total_assessments = db.scalar(select(func.count()).select_from(Assessment).where(_owned(db))) or 0
     pending_reviews = (
         db.scalar(
             select(func.count())
             .select_from(Assessment)
+            .where(_owned(db))
             .where(Assessment.status.in_(["pending_review", "needs_review"]))
         )
         or 0
@@ -353,6 +373,7 @@ def get_dashboard_summary(db: Session) -> dict[str, Any]:
         db.scalar(
             select(func.count())
             .select_from(Assessment)
+            .where(_owned(db))
             .where(Assessment.status == "review_completed")
         )
         or 0
@@ -360,7 +381,7 @@ def get_dashboard_summary(db: Session) -> dict[str, Any]:
 
     predictions = list(
         db.scalars(
-            select(Prediction).order_by(
+            select(Prediction).join(Assessment).where(_owned(db)).order_by(
                 Prediction.assessment_id.asc(),
                 Prediction.created_at.desc(),
             )
@@ -372,7 +393,7 @@ def get_dashboard_summary(db: Session) -> dict[str, Any]:
 
     reviews = list(
         db.scalars(
-            select(ClinicianReview).order_by(
+            select(ClinicianReview).join(Assessment).where(_owned(db)).order_by(
                 ClinicianReview.assessment_id.asc(),
                 ClinicianReview.created_at.desc(),
             )

@@ -175,6 +175,7 @@ export interface AssessmentListItem {
   created_at?: string | null;
   updated_at?: string | null;
   report_ids?: string[] | null;
+  reports?: Array<{ report_id: string; report_status: string; created_at?: string | null }>;
 }
 
 export interface AssessmentDetail extends AssessmentListItem {

@@ -54,3 +54,7 @@ model_artifacts/*.joblib
 
 # Legacy/local archive content
 legacy/
+
+# Generated federation credentials and operator deployment configuration.
+gha-creds-*.json
+deployment/cloud-run/staging.local.json

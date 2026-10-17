@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 from app.backend.api.routes.reports import get_or_generate_assessment_report_pdf
 from app.backend.db import repositories
-from app.backend.db.session import get_db
+from app.backend.core.security import get_authenticated_db as get_db
 from app.backend.schemas.assessment import (
     AssessmentAuditEvent,
     AssessmentAuditTrailResponse,
@@ -232,6 +232,7 @@ def list_assessments(db: Session = Depends(get_db)) -> list[AssessmentListItem]:
             if latest_review and latest_review.final_esi is not None
             else latest_prediction.final_esi if latest_prediction else None
         )
+        reports = repositories.list_reports_for_assessment(db, assessment.id)
         items.append(
             AssessmentListItem(
                 assessment_id=assessment.id,
@@ -256,10 +257,9 @@ def list_assessments(db: Session = Depends(get_db)) -> list[AssessmentListItem]:
                 reviewer_role=reviewer_role,
                 created_at=assessment.created_at,
                 updated_at=assessment.updated_at,
-                report_ids=[
-                    report.id
-                    for report in repositories.list_reports_for_assessment(db, assessment.id)
-                ],
+                report_ids=[report.id for report in reports],
+                reports=[dict(report_id=report.id, report_status=report.report_status,
+                              created_at=report.created_at) for report in reports],
             )
         )
     return items

@@ -1,3 +1,4 @@
+import { clearSession, sessionHeaders } from './session';
 import type { ApiErrorBody } from '@/types/api';
 
 export const API_BASE_URL =
@@ -67,7 +68,8 @@ export async function apiRequest<T>(
   options: ApiRequestOptions = {},
 ): Promise<T> {
   const { body, headers, ...requestOptions } = options;
-  const requestHeaders = new Headers(headers);
+  const requestHeaders = new Headers({ ...sessionHeaders() });
+  new Headers(headers).forEach((value, key) => requestHeaders.set(key, value));
 
   let requestBody: BodyInit | undefined;
   if (body !== undefined) {
@@ -80,13 +82,16 @@ export async function apiRequest<T>(
   }
 
   const response = await fetch(joinUrl(path), {
-    credentials: 'include',
     ...requestOptions,
     headers: requestHeaders,
     body: requestBody,
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      clearSession();
+      window.dispatchEvent(new Event("triageai:session-expired"));
+    }
     const details = await readErrorBody(response);
     const fallback = `Request failed with ${response.status} ${response.statusText}`;
     throw new ApiError(messageFromErrorBody(details, fallback), response, details);
@@ -101,7 +106,8 @@ export async function apiBlobRequest(
   options: ApiRequestOptions = {},
 ): Promise<Blob> {
   const { body, headers, ...requestOptions } = options;
-  const requestHeaders = new Headers(headers);
+  const requestHeaders = new Headers({ ...sessionHeaders() });
+  new Headers(headers).forEach((value, key) => requestHeaders.set(key, value));
 
   let requestBody: BodyInit | undefined;
   if (body !== undefined) {
@@ -114,13 +120,16 @@ export async function apiBlobRequest(
   }
 
   const response = await fetch(joinUrl(path), {
-    credentials: 'include',
     ...requestOptions,
     headers: requestHeaders,
     body: requestBody,
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      clearSession();
+      window.dispatchEvent(new Event("triageai:session-expired"));
+    }
     const details = await readErrorBody(response);
     const fallback = `Request failed with ${response.status} ${response.statusText}`;
     throw new ApiError(messageFromErrorBody(details, fallback), response, details);

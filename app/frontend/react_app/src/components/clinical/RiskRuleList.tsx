@@ -19,7 +19,7 @@ export function RiskRuleList({ rules }: { rules: RuleHit[] }) {
   return (
     <div className="space-y-3">
       {rules.map((rule) => (
-        <div key={rule.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div key={rule.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
           <div className="flex items-start justify-between gap-3">
             <div className="flex gap-3">
               <div className="mt-0.5 rounded-xl bg-red-50 p-2 text-red-700">

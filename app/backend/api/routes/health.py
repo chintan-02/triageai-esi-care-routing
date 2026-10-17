@@ -5,6 +5,8 @@ from fastapi import APIRouter, Response
 from sqlalchemy import text
 
 from app.backend.db.session import engine
+from app.backend.db.base import assert_schema_current
+from app.backend.core.config import settings
 from app.backend.services.model_loader import get_model_bundle
 
 router = APIRouter(tags=["health"])
@@ -54,13 +56,20 @@ def readiness_check(response: Response) -> dict[str, Any]:
     except Exception:
         database_connected = False
 
-    is_ready = database_connected and bundle.loaded
+    schema_current = True
+    if settings.APP_ENV.lower() in {"production", "staging"}:
+        try:
+            assert_schema_current()
+        except Exception:
+            schema_current = False
+    is_ready = database_connected and schema_current and bundle.loaded
     if not is_ready:
         response.status_code = 503
 
     return {
         "status": "ready" if is_ready else "not_ready",
         "database_connected": database_connected,
+        "schema_current": schema_current,
         "database": "connected" if database_connected else "not_connected",
         "model_loaded": bundle.loaded,
         "model_version": bundle.model_version,

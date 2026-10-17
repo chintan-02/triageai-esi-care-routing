@@ -54,3 +54,19 @@ def _ensure_sqlite_compat_columns(engine: object) -> None:
                 connection.execute(
                     text("ALTER TABLE assessments ADD COLUMN comorbidities_json TEXT")
                 )
+
+
+def assert_schema_current() -> None:
+    """Deployment startup verifies migrations, never mutates the schema."""
+    from pathlib import Path
+    from alembic.config import Config
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+    from app.backend.db.session import engine
+    root = Path(__file__).resolve().parents[3]
+    config = Config(str(root / "alembic.ini"))
+    expected = set(ScriptDirectory.from_config(config).get_heads())
+    with engine.connect() as connection:
+        actual = set(MigrationContext.configure(connection).get_current_heads())
+    if actual != expected:
+        raise RuntimeError("Database migrations are not current; run alembic upgrade head before deployment")

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends
 
 from app.backend.db import repositories
-from app.backend.db.session import get_db
+from app.backend.core.security import get_authenticated_db as get_db
 from app.backend.schemas.intake import PatientIntakeRequest
 from app.backend.schemas.prediction import ESIPredictionResponse
 from app.backend.services.prediction_service import predict_esi_for_intake
