@@ -185,3 +185,9 @@ Budget research references (verify again before provisioning):
 - https://neon.com/docs/introduction/plans
 - https://cloud.google.com/sql/pricing
 - https://cloud.google.com/run/pricing
+
+## Verified live deployment
+
+See [the live demo runbook](live-demo-runbook.md) for the deployed resource inventory,
+rollback and cleanup operations, and [monitoring setup](monitoring.md) for uptime
+and failure alerts. The runbook distinguishes verified deployment from pending checks.
