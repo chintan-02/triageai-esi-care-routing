@@ -1,3 +1,4 @@
+from datetime import timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -92,20 +93,35 @@ def download_report(report_id: str, db: Session = Depends(get_db)) -> Response:
     return _pdf_response(record)
 
 
+def _report_is_current(db: Session, assessment, record) -> bool:
+    """Compare snapshot creation to report inputs; SQLite returns naive UTC dates."""
+    def utc(value):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+    inputs = [assessment.updated_at]
+    for item in (
+        repositories.get_latest_prediction_for_assessment(db, assessment.id),
+        repositories.get_latest_clinician_review_for_assessment(db, assessment.id),
+    ):
+        if item is not None:
+            inputs.append(item.created_at)
+    return record.include_audit and all(utc(value) < utc(record.created_at) for value in inputs)
+
+
 def get_or_generate_assessment_report_pdf(assessment_id: str, db: Session) -> Response:
     assessment = repositories.get_assessment_by_id(db, assessment_id)
     if assessment is None:
         raise HTTPException(404, "Assessment not found")
     record = repositories.get_latest_generated_report_for_assessment(db, assessment_id)
     regenerated = record is not None
-    if record is not None:
+    if record is not None and _report_is_current(db, assessment, record):
         try:
             return _pdf_response(record)
         except HTTPException as exc:
             if exc.status_code != 404:
                 raise
-    else:
-        record = repositories.create_report_record(db, ReportRequest(assessment_id=assessment_id, include_audit=True))
+    # Preserve every previous report UUID/object as a historical snapshot.
+    record = repositories.create_report_record(db, ReportRequest(assessment_id=assessment_id, include_audit=True))
     _persist_pdf(db, assessment, record, True)
     action = "report_regenerated" if regenerated else "report_generated"
     repositories.create_audit_log(

@@ -408,3 +408,56 @@ def test_assessment_list_exposes_current_report_status_not_historical_audit():
     assert client.get(f'/reports/{rid}/download').status_code == 404
     events = client.get(f'/assessments/{aid}/audit').json()['events']
     assert any(event['action'] == 'report_generated' for event in events)
+
+
+def test_assessment_pdf_refreshes_after_review_and_preserves_snapshot() -> None:
+    prediction = client.post('/predict', json=valid_intake_payload()).json()
+    assessment_id = prediction['assessment_id']
+    url = f'/assessments/{assessment_id}/report/pdf'
+    before = client.get(url)
+    assert before.status_code == 200
+    assert 'Pending review' in pdf_text(before.content)
+    original_id = client.get(f'/assessments/{assessment_id}').json()['report_ids'][0]
+    review = client.post('/clinician-review', json={
+        'assessment_id': assessment_id, 'clinician_id': 'snapshot-reviewer',
+        'action': 'accept', 'final_esi': prediction['final_esi'],
+        'notes': 'Snapshot review accepted.',
+    })
+    assert review.status_code == 200
+    after = client.get(url)
+    assert after.status_code == 200
+    text = pdf_text(after.content)
+    assert 'Clinician decision: Accepted' in text
+    assert 'snapshot-reviewer' in text
+    assert 'Snapshot Review Accepted' in text
+    assert f"Clinician final ESI: {prediction['final_esi']}" in text
+    assert 'Reviewed time: Pending review' not in text
+    detail = client.get(f'/assessments/{assessment_id}').json()
+    assert len(detail['report_ids']) == 2
+    assert 'report_regenerated' in [event['action'] for event in detail['audit_trail']]
+    assert client.get(f'/reports/{original_id}/download').content == before.content
+    assert client.get(url).content == after.content
+    assert len(client.get(f'/assessments/{assessment_id}').json()['report_ids']) == 2
+
+
+def test_report_freshness_handles_utc_and_changed_prediction(monkeypatch) -> None:
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+    from app.backend.api.routes.reports import _report_is_current
+    from app.backend.db import repositories
+
+    generated = datetime(2026, 10, 17, 4, 0, tzinfo=timezone.utc)
+    assessment = SimpleNamespace(id='test', updated_at=generated - timedelta(minutes=1))
+    record = SimpleNamespace(created_at=generated.replace(tzinfo=None), include_audit=True)
+    prediction = SimpleNamespace(created_at=generated - timedelta(seconds=1))
+    monkeypatch.setattr(repositories, 'get_latest_prediction_for_assessment', lambda *_: prediction)
+    monkeypatch.setattr(repositories, 'get_latest_clinician_review_for_assessment', lambda *_: None)
+    assert _report_is_current(None, assessment, record)
+    prediction.created_at = generated + timedelta(seconds=1)
+    assert not _report_is_current(None, assessment, record)
+    prediction.created_at = generated - timedelta(seconds=1)
+    assessment.updated_at = generated + timedelta(seconds=1)
+    assert not _report_is_current(None, assessment, record)
+    assessment.updated_at = generated - timedelta(seconds=1)
+    record.include_audit = False
+    assert not _report_is_current(None, assessment, record)
