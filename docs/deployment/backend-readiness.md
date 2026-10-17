@@ -2,7 +2,7 @@
 
 Branch: `feat/cloud-run-deployment`  
 Baseline commit: `2afb41c`  
-Scope: local implementation and verification; no cloud resources provisioned.
+Original scope: local implementation. Cloud deployment is now verified; see [live operations](live-demo-runbook.md) and [dated release evidence](../releases/cloud-demo-2026-10-17.md).
 
 ## Implemented architecture
 

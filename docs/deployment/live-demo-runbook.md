@@ -1,6 +1,6 @@
 # TriageAI live demo operations
 
-Recorded 2026-10-16 from operator deployment outputs. This is an educational,
+Updated 2026-10-17 UTC from operator verification on 2026-10-16 America/Edmonton. This is an educational,
 synthetic-data portfolio demo, not a clinical production deployment. Resource
 names below are not credentials. Never commit passwords, session tokens, owner
 connection strings, gcloud credentials or local virtual environments.
@@ -41,6 +41,17 @@ Staging is **not** an isolated database test environment. Do not run destructive
 migration tests there. Use separate data, storage and identities before claiming
 production/staging isolation or introducing real data. Do not import historical
 SQLite records into the public demo without reviewing whether they are synthetic.
+
+## Current verified release
+
+- Source application commit: `06d5b67`.
+- Image digest: `sha256:ddc1eb4e479d1fba16585ab6ae532637556721272a992524b07a25b907f6dcde`.
+- Staging candidate: `triageai-staging-00002-cog`, tested with 0% normal traffic; no staging traffic promotion was recorded.
+- Public demo: `triageai-demo-00002-buj`, operator confirmed candidate checks, promotion and browser PDF verification.
+- Previous demo revision / compatible application rollback target: `triageai-demo-00001-lut`.
+- No schema migration was required. Existing IAM, secrets and scheduler configuration were preserved.
+- PDF regression passed: pending snapshot → accepted review → new accepted PDF; original report bytes preserved and unchanged current PDF reused.
+- Uptime checks observed successful responses. Five real policies enabled. Temporary delivery test opened and emailed at 23:40 MDT; deleting its policy generated a closure email at 23:44 MDT. Test policy removed; real email channel retained.
 
 ## Runtime configuration and IAM
 
@@ -187,8 +198,7 @@ second cleanup job for the shared demo/staging database.
 ## Monitoring and final acceptance
 
 See [monitoring.md](monitoring.md) for reproducible dry-run/apply commands,
-thresholds, email delivery verification and costs. A monitoring configuration
-commit is not evidence that cloud alerts have been installed or delivered.
+thresholds, email delivery verification and costs. Cloud resources and opening/closure email delivery were verified by the operator; this does not prove every failure condition has been exercised.
 
 Operator confirmed browser intake, real prediction, safety escalation, reviewer
 action, audit history and PDF download on 2026-10-16. Still verify mobile layout,

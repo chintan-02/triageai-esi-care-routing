@@ -20,6 +20,16 @@ Fifteen-minute probes reduce but do not eliminate usage. Review current pricing,
 provider quotas and actual billing; do not assume monitoring is free. Private
 staging is not given public access for uptime monitoring.
 
+## Verification record
+
+Operator screenshots on October 16, 2026 (America/Edmonton) confirmed successful
+API/frontend uptime samples, five enabled operational policies and the expected
+email channel. A temporary healthy-check threshold policy generated an incident
+and delivered its opening email at 23:40 MDT. Deleting that temporary policy
+cancelled the incident and delivered a closure email at 23:44 MDT. The test policy
+was removed; the five operational policies and channel were retained. This tests
+notification delivery, not every operational failure condition.
+
 ## Prepare on the operator Mac
 
 Use the existing Python 3.12 `.venv-cloud`. The script uses only Python's standard
@@ -82,8 +92,7 @@ policy or disposable resource and be documented, then removed.
   alone does not distinguish a broken schedule from Monitoring ingestion failure.
 
 Outstanding limitations: public demo release automation, independent staging data,
-verified cloud database backup/restore, full browser/mobile acceptance and a tested
-incident notification exercise. No live drift or accuracy monitoring is claimed.
+verified cloud database backup/restore, full browser/mobile acceptance and broader failure-condition exercises. No live drift or accuracy monitoring is claimed.
 
 ## Official references
 
