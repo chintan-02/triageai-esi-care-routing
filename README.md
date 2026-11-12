@@ -197,7 +197,6 @@ It explicitly reports missing information such as:
 
 ```bash
 curl -X POST "http://localhost:8001/nlp/extract-intake" \
-  -H "Authorization: Bearer $TRIAGEAI_DEMO_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TRIAGEAI_SESSION_TOKEN" \
   -d '{
